@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h1 class="h4 mb-3">Inserisci codici prodotto</h1>
+        <p class="text-muted">Inserisci un codice per riga. L'applicazione recupera i dati dal PIM, arricchisce la categoria e crea una short description.</p>
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label" for="codes">Codici prodotto</label>
+            <textarea class="form-control" id="codes" name="codes" rows="6" placeholder="P001\nP002\nP003" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Recupera prodotti</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
