@@ -1,21 +1,28 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h4">Prodotti richiesti</h1>
+  <div>
+    <div class="section-title mb-2"><span class="text-warning">●</span> Prodotti richiesti</div>
+    <h1 class="h4">Anteprima dati dal PIM</h1>
+  </div>
   <a class="btn btn-outline-secondary" href="{{ url_for('codes') }}">Nuova lista</a>
 </div>
 
 <div class="row row-cols-1 row-cols-md-2 g-3">
   {% for product in products %}
   <div class="col">
-    <div class="card h-100 shadow-sm">
+    <div class="card brand-card h-100">
       <div class="card-body d-flex flex-column">
-        <h2 class="h5">{{ product.name }}</h2>
-        <p class="text-muted mb-1">Codice: {{ product.code }}</p>
-        <p class="text-muted mb-1">Brand: {{ product.brand }}</p>
-        <p class="badge text-bg-info align-self-start">{{ product.category }}</p>
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            <p class="text-muted small mb-1">Codice {{ product.code }}</p>
+            <h2 class="h5 mb-0">{{ product.name }}</h2>
+          </div>
+          <span class="badge text-bg-info">{{ product.category }}</span>
+        </div>
+        <p class="text-muted mb-1">Brand: <strong>{{ product.brand }}</strong></p>
         <p class="mt-2 flex-grow-1">{{ product.short_description }}</p>
-        <a class="btn btn-primary mt-2" href="{{ url_for('product_detail', code=product.code) }}">Apri scheda</a>
+        <a class="btn btn-primary mt-2 align-self-start" href="{{ url_for('product_detail', code=product.code) }}">Apri scheda</a>
       </div>
     </div>
   </div>
