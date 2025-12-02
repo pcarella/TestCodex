@@ -1,0 +1,16 @@
+<svg width="120" height="40" viewBox="0 0 120 40" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PIM Assistant logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="120" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d6181f" />
+      <stop offset="1" stop-color="#b61117" />
+    </linearGradient>
+    <radialGradient id="sun" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#ffd25f" />
+      <stop offset="100%" stop-color="#f6b000" />
+    </radialGradient>
+  </defs>
+  <rect x="0" y="4" width="48" height="32" rx="16" fill="url(#bg)" />
+  <circle cx="24" cy="20" r="11" fill="white" opacity="0.9" />
+  <circle cx="24" cy="20" r="7" fill="url(#sun)" />
+  <text x="58" y="25" fill="#2d2a32" font-family="'Poppins', 'Segoe UI', sans-serif" font-size="14" font-weight="700">PIM Assistant</text>
+</svg>

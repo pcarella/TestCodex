@@ -64,34 +64,10 @@
         gap: 0.75rem;
       }
 
-      .brand-symbol {
-        width: 44px;
+      .brand-logo {
         height: 44px;
-        border-radius: 50%;
-        background: var(--brand-gradient);
-        display: grid;
-        place-items: center;
-        box-shadow: 0 10px 22px rgba(214, 24, 31, 0.25);
-      }
-
-      .brand-symbol__dot {
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        background: #ffffff;
-        position: relative;
-      }
-
-      .brand-symbol__dot::after {
-        content: "";
-        position: absolute;
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: #f08c3b;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
+        width: auto;
+        display: block;
       }
 
       .brand-title {
@@ -292,13 +268,11 @@
       <div class="container">
         <div class="app-header__inner">
           <div class="app-brand">
-            <div class="brand-symbol">
-              <span class="brand-symbol__dot"></span>
-            </div>
-            <div>
-              <div class="brand-title">PIM Assistant</div>
-              <div class="brand-subtitle">Conad Mantova</div>
-            </div>
+            <img
+              src="{{ url_for('static', filename='logo.svg') }}"
+              alt="PIM Assistant"
+              class="brand-logo"
+            />
           </div>
 
           <div class="app-steps" aria-label="Progressione del flusso">
