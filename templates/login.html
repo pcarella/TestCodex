@@ -1,27 +1,121 @@
 {% extends 'base.html' %}
 {% block content %}
+<style>
+  body {
+    background: #f5f6f7;
+  }
+
+  .login-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    box-shadow: 0 22px 40px rgba(0, 0, 0, 0.06);
+    padding: 2.25rem 2rem;
+  }
+
+  .login-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1f2937;
+  }
+
+  .login-subtitle {
+    color: #6b7280;
+  }
+
+  .login-form label {
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .login-form .form-control {
+    border-radius: 10px;
+    border-color: #d1d5db;
+    padding: 0.9rem 0.95rem;
+  }
+
+  .login-form .form-control:focus {
+    box-shadow: 0 0 0 0.2rem rgba(235, 133, 50, 0.2);
+    border-color: #f08c3b;
+  }
+
+  .login-actions {
+    color: #4b5563;
+  }
+
+  .login-actions a {
+    color: #f08c3b;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .login-actions a:hover {
+    color: #dd6b20;
+  }
+
+  .btn-login {
+    background: linear-gradient(120deg, #f08c3b, #e86f1e);
+    border: none;
+    border-radius: 999px;
+    padding: 0.85rem 2rem;
+    font-weight: 700;
+    box-shadow: 0 14px 30px rgba(232, 111, 30, 0.35);
+  }
+
+  .btn-login:hover {
+    background: linear-gradient(120deg, #e86f1e, #d45a11);
+  }
+
+  .login-footer {
+    color: #9ca3af;
+  }
+</style>
+
 <div class="row justify-content-center">
-  <div class="col-md-7 col-lg-6">
-    <div class="card brand-card">
-      <div class="card-body">
-        <div class="d-flex align-items-center gap-2 mb-1 text-uppercase text-muted small">
-          <span class="text-warning">●</span>
-          Accesso Conad PIM
-        </div>
-        <h1 class="h4 mb-3">Bentornato!</h1>
-        <p class="text-muted">Accedi per gestire le schede prodotto e mantenere il catalogo allineato allo stile Conad.</p>
-        <form method="post" class="mt-3">
-          <div class="mb-3">
-            <label class="form-label" for="username">Username</label>
-            <input type="text" class="form-control form-control-lg" id="username" name="username" required />
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="password">Password</label>
-            <input type="password" class="form-control form-control-lg" id="password" name="password" required />
-          </div>
-          <button type="submit" class="btn btn-primary w-100">Entra</button>
-        </form>
+  <div class="col-md-7 col-lg-5">
+    <div class="login-card">
+      <div class="mb-3">
+        <p class="text-uppercase text-muted fw-semibold mb-1 small">Accedi</p>
+        <h1 class="login-title mb-2">Benvenuto</h1>
+        <p class="login-subtitle mb-0">
+          Entra per gestire le schede prodotto dal PIM.
+        </p>
       </div>
+      <form method="post" class="login-form">
+        <div class="mb-3">
+          <label class="form-label" for="username">Email o username</label>
+          <input
+            type="text"
+            class="form-control"
+            id="username"
+            name="username"
+            placeholder="demo"
+            required
+          />
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="password">Password</label>
+          <input
+            type="password"
+            class="form-control"
+            id="password"
+            name="password"
+            placeholder="••••"
+            required
+          />
+        </div>
+        <div class="d-flex align-items-center justify-content-between login-actions mb-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="remember" />
+            <label class="form-check-label" for="remember">Ricordami</label>
+          </div>
+          <a href="#">Password dimenticata?</a>
+        </div>
+        <div class="d-grid">
+          <button type="submit" class="btn btn-login text-white">Accedi</button>
+        </div>
+      </form>
+      <p class="login-footer text-center mt-3">Accesso riservato agli utenti interni.</p>
     </div>
   </div>
 </div>
