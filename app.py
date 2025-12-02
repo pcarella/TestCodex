@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Dict, List, Optional, Tuple
 from xml.etree import ElementTree
 
@@ -206,26 +207,44 @@ def classify_with_agent(user_prompt: str):
         print(
             f"[OpenAI] Invio prompt all'agente {OPENAI_AGENT_ID}: {user_prompt}"
         )
-        response = openai_client.responses.create(
-            agent_id=OPENAI_AGENT_ID,
-            input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": user_prompt,
-                        }
-                    ],
-                }
-            ],
+
+        thread = openai_client.beta.threads.create()
+        openai_client.beta.threads.messages.create(
+            thread_id=thread.id,
+            role="user",
+            content=user_prompt,
         )
-        response_text = _extract_response_text(response)
-        if response_text:
-            print(f"[OpenAI] Risposta grezza dall'agente: {response_text}")
+
+        run = openai_client.beta.threads.runs.create(
+            thread_id=thread.id, assistant_id=OPENAI_AGENT_ID
+        )
+
+        while run.status in ("queued", "in_progress"):
+            run = openai_client.beta.threads.runs.retrieve(
+                thread_id=thread.id, run_id=run.id
+            )
+
+        if run.status != "completed":
+            print(f"[OpenAI] Run non completato: stato {run.status}")
+            return None
+
+        messages = openai_client.beta.threads.messages.list(thread_id=thread.id)
+        assistant_msg = messages.data[0] if getattr(messages, "data", None) else None
+        text_chunks: List[str] = []
+        if assistant_msg:
+            for chunk in getattr(assistant_msg, "content", []) or []:
+                if getattr(chunk, "type", "") == "text":
+                    text_value = getattr(chunk, "text", None)
+                    if text_value is not None:
+                        text_chunks.append(getattr(text_value, "value", ""))
+
+        full_text = "".join(text_chunks).strip()
+        if full_text:
+            print(f"[OpenAI] Risposta grezza dall'agente: {full_text}")
         else:
             print("[OpenAI] Risposta grezza dall'agente vuota o non leggibile.")
-        return response
+
+        return SimpleNamespace(output_text=full_text)
     except Exception as exc:
         print(f"[OpenAI] Errore durante la classificazione: {exc}")
         return None
