@@ -2,12 +2,12 @@
 {% block content %}
 <div class="row justify-content-center mb-3">
   <div class="col-lg-10 col-xl-8">
-    <div class="subtle-panel d-flex align-items-start gap-3">
-      <div class="fs-2">🛒</div>
+    <div class="d-flex align-items-start gap-3">
+      <div class="fs-3">📦</div>
       <div>
-        <div class="section-title mb-1"><span class="text-warning">●</span> Flusso PIM ispirato a Conad</div>
-        <h1 class="h4 mt-2 mb-2">Inserisci i codici prodotto</h1>
-        <p class="mb-0 text-muted">Inserisci un codice per riga: recupereremo i dati dal PIM, arricchiremo la categoria e costruiremo una short description pronta per il catalogo.</p>
+        <div class="section-title mb-1"><span class="text-warning">●</span> Lista codici prodotto</div>
+        <h1 class="h4 mt-1 mb-2">Inserisci i codici prodotto</h1>
+        <p class="mb-0 text-muted">Inserisci i codici: recupereremo i dati dal PIM, arricchiremo la categoria e costruiremo una short description pronta per il catalogo.</p>
       </div>
     </div>
   </div>
@@ -25,21 +25,60 @@
           <span class="badge text-bg-info">Velocizza il catalogo</span>
         </div>
 
-        <form method="post" class="mt-2">
+        <form method="post" class="mt-2" enctype="multipart/form-data">
           <div class="mb-3">
-            <label class="form-label" for="codes">Codici prodotto</label>
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="form-label mb-0" for="codes">Codici prodotto</label>
+              <small class="text-muted">Inserisci un codice per riga oppure separali con virgole.</small>
+            </div>
             <textarea
               class="form-control form-control-lg"
               id="codes"
               name="codes"
               rows="6"
-              placeholder="P001\nP002\nP003"
-              required
-            ></textarea>
+              placeholder="Es.\n1234567890\n9876543210\n0001122333"
+            >{{ request.form.get('codes', '') }}</textarea>
+            <div class="form-text">Minimo 1 codice. Puoi incollare anche da Excel.</div>
           </div>
-          <div class="d-flex align-items-center justify-content-between">
-            <div class="text-muted small">Suggerimento: usa i codici dal gestionale Conad per risultati più coerenti.</div>
-            <button type="submit" class="btn btn-primary px-4">Recupera prodotti</button>
+
+          <div class="my-3 text-center text-muted">— oppure —</div>
+
+          <div class="mb-4 d-flex align-items-center gap-3 flex-wrap">
+            <div class="d-flex align-items-center gap-2 flex-grow-1">
+              <div class="bg-warning-subtle text-warning-emphasis rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                <span class="fw-bold">CSV</span>
+              </div>
+              <div>
+                <div class="fw-semibold">Carica file CSV</div>
+                <div class="small text-muted">Il file deve contenere una colonna <code>code_prodotto</code>.</div>
+              </div>
+            </div>
+            <div>
+              <input class="form-control" type="file" id="csv_file" name="csv_file" accept=".csv" />
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <div class="fw-semibold mb-2">Opzioni di elaborazione</div>
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" value="1" id="generate_short_description" name="generate_short_description" checked />
+              <label class="form-check-label" for="generate_short_description">
+                Genera short description con AI
+              </label>
+              <div class="text-muted small">Titoli accattivanti e coerenti per l'Ecommerce.</div>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" value="1" id="recognize_category" name="recognize_category" checked />
+              <label class="form-check-label" for="recognize_category">
+                Riconosci categoria prodotto
+              </label>
+              <div class="text-muted small">Per avere la categorizzazione coerente con il tuo PIM.</div>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-end gap-3 mt-2">
+            <a class="btn btn-outline-secondary" href="{{ url_for('logout') }}">Annulla</a>
+            <button type="submit" class="btn btn-primary px-4">Recupera dati dal PIM</button>
           </div>
         </form>
       </div>

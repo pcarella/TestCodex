@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import csv
+import io
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -96,12 +99,25 @@ def fetch_from_pim(codes: List[str]) -> List[Dict[str, str]]:
     return results
 
 
-def build_products(codes: List[str]) -> List[Product]:
+def build_products(
+    codes: List[str],
+    *,
+    generate_short_description: bool = True,
+    recognize_category: bool = True,
+) -> List[Product]:
     raw_products = fetch_from_pim(codes)
     products: List[Product] = []
     for product in raw_products:
-        category = classify_category(product["name"], product["description"])
-        short_description = generate_short_description(product)
+        category = (
+            classify_category(product["name"], product["description"])
+            if recognize_category
+            else ""
+        )
+        short_description = (
+            generate_short_description(product)
+            if generate_short_description
+            else ""
+        )
         products.append(
             Product(
                 code=product["code"],
@@ -114,6 +130,31 @@ def build_products(codes: List[str]) -> List[Product]:
             )
         )
     return products
+
+
+def parse_codes(raw_codes: str, csv_file) -> List[str]:
+    codes: List[str] = []
+
+    def add_code(value: str) -> None:
+        code = value.strip()
+        if code and code not in codes:
+            codes.append(code)
+
+    for code in re.split(r"[\n,]+", raw_codes):
+        add_code(code)
+
+    if csv_file and csv_file.filename:
+        content = csv_file.stream.read()
+        try:
+            decoded = content.decode("utf-8")
+        except UnicodeDecodeError:
+            return codes
+
+        reader = csv.DictReader(io.StringIO(decoded))
+        for row in reader:
+            add_code(row.get("code_prodotto", ""))
+
+    return codes
 
 
 def login_required(view_func):
@@ -158,11 +199,24 @@ def logout():
 def codes():
     if request.method == "POST":
         raw_codes = request.form.get("codes", "")
-        codes = [code.strip() for code in raw_codes.splitlines() if code.strip()]
+        csv_file = request.files.get("csv_file")
+        generate_short_description = bool(request.form.get("generate_short_description"))
+        recognize_category = bool(request.form.get("recognize_category"))
+
+        codes = parse_codes(raw_codes, csv_file)
         if not codes:
             flash("Inserisci almeno un codice prodotto.")
         else:
-            session["products"] = [product.__dict__ for product in build_products(codes)]
+            products = build_products(
+                codes,
+                generate_short_description=generate_short_description,
+                recognize_category=recognize_category,
+            )
+            session["products"] = [product.__dict__ for product in products]
+            session["options"] = {
+                "generate_short_description": generate_short_description,
+                "recognize_category": recognize_category,
+            }
             return redirect(url_for("results"))
     return render_template("codes.html")
 
@@ -174,7 +228,11 @@ def results():
     if not products:
         flash("Nessun prodotto richiesto. Inserisci i codici per continuare.")
         return redirect(url_for("codes"))
-    return render_template("results.html", products=products)
+    options = session.get(
+        "options",
+        {"generate_short_description": True, "recognize_category": True},
+    )
+    return render_template("results.html", products=products, options=options)
 
 
 @app.route("/prodotto/<code>", methods=["GET", "POST"])
