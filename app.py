@@ -180,41 +180,60 @@ def classify_product_category(product_data: Dict[str, str]) -> Optional[Dict[str
     }
     print(f"[OpenAI] Richiesta classificazione: {json.dumps(payload, ensure_ascii=False)}")
 
+    prompt = json.dumps(payload, ensure_ascii=False)
+
+    response = classify_with_agent(prompt)
+    if not response:
+        return None
+
+    response_text = _extract_response_text(response)
+    if response_text:
+        print(f"[OpenAI] Risposta classificazione: {response_text}")
+    else:
+        print("[OpenAI] Risposta classificazione vuota o non leggibile.")
+
+    return parse_classification_response(response)
+
+
+def classify_with_agent(user_prompt: str):
+    if not openai_client:
+        return None
+    if not OPENAI_AGENT_ID:
+        print("[OpenAI] OPENAI_AGENT_ID non configurato: salto la classificazione AI.")
+        return None
+
     try:
+        print(
+            f"[OpenAI] Invio prompt all'agente {OPENAI_AGENT_ID}: {user_prompt}"
+        )
         response = openai_client.responses.create(
             agent_id=OPENAI_AGENT_ID,
-            model=OPENAI_MODEL,
             input=[
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "input_text",
-                            "text": (
-                                "Restituisci SEMPRE e SOLO un JSON con le chiavi "
-                                "category_2_id, category_2_name, category_1_name, reason "
-                                "basandoti sui dati prodotto seguenti: "
-                                f"{json.dumps(payload, ensure_ascii=False)}"
-                            ),
+                            "text": user_prompt,
                         }
                     ],
                 }
             ],
         )
+        response_text = _extract_response_text(response)
+        if response_text:
+            print(f"[OpenAI] Risposta grezza dall'agente: {response_text}")
+        else:
+            print("[OpenAI] Risposta grezza dall'agente vuota o non leggibile.")
+        return response
     except Exception as exc:
         print(f"[OpenAI] Errore durante la classificazione: {exc}")
         return None
 
-    print(f"[OpenAI] Risposta classificazione: {response}")
 
+def parse_classification_response(response) -> Optional[Dict[str, str]]:
     try:
-        if hasattr(response, "output_text") and response.output_text:
-            raw_text = response.output_text.strip()
-        else:
-            output_blocks = getattr(response, "output", None) or []
-            first_block = output_blocks[0]
-            content_list = getattr(first_block, "content", None) or []
-            raw_text = (getattr(content_list[0], "text", "") or "").strip()
+        raw_text = _extract_response_text(response)
 
         parsed = json.loads(raw_text)
         required_keys = {"category_2_id", "category_2_name", "category_1_name", "reason"}
@@ -227,6 +246,19 @@ def classify_product_category(product_data: Dict[str, str]) -> Optional[Dict[str
     except (AttributeError, IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
         print(f"[OpenAI] Impossibile leggere la risposta AI come JSON: {exc}")
         return None
+
+
+def _extract_response_text(response) -> str:
+    try:
+        if hasattr(response, "output_text") and response.output_text:
+            return str(response.output_text).strip()
+
+        output_blocks = getattr(response, "output", None) or []
+        first_block = output_blocks[0]
+        content_list = getattr(first_block, "content", None) or []
+        return (getattr(content_list[0], "text", "") or "").strip()
+    except (AttributeError, IndexError, KeyError, TypeError):
+        return ""
 
 
 def fetch_product_from_api(code: str) -> Optional[Dict[str, str]]:
