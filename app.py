@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
+import os
 import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional
@@ -15,14 +17,51 @@ from flask import (
     session,
     url_for,
 )
+from sqlalchemy import Column, Integer, String, create_engine, select
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 app = Flask(__name__)
 app.secret_key = "dev-secret-key"
 
-USERS: Dict[str, str] = {
-    "admin": "password",
-    "demo": "demo",
-}
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
+engine = create_engine(
+    DATABASE_URL,
+    future=True,
+    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
+)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String(255), unique=True, nullable=False)
+    password_hash = Column(String(64), nullable=False)
+
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+def init_db() -> None:
+    Base.metadata.create_all(engine)
+
+    default_users: Dict[str, str] = {
+        "admin": "password",
+        "demo": "demo",
+    }
+    with SessionLocal.begin() as db_session:
+        for username, password in default_users.items():
+            existing_user = db_session.execute(
+                select(User).where(User.username == username)
+            ).scalar_one_or_none()
+            if not existing_user:
+                db_session.add(User(username=username, password_hash=hash_password(password)))
+
+
+init_db()
 
 
 @dataclass
@@ -191,7 +230,7 @@ def login_required(view_func):
 def ensure_authenticated():
     """Redirect users to the login page if they are not authenticated."""
 
-    exempt_endpoints = {"login", "static"}
+    exempt_endpoints = {"login", "register", "static"}
     if request.endpoint in exempt_endpoints:
         return None
 
@@ -216,12 +255,50 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        if USERS.get(username) == password:
-            session["user"] = username
-            session.pop("products", None)
-            return redirect(url_for("codes"))
+        with SessionLocal() as db_session:
+            user = db_session.execute(
+                select(User).where(User.username == username)
+            ).scalar_one_or_none()
+            if user and user.password_hash == hash_password(password):
+                session["user"] = username
+                session.pop("products", None)
+                return redirect(url_for("codes"))
         flash("Credenziali non valide. Riprova.")
     return render_template("login.html")
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if session.get("user"):
+        return redirect(url_for("codes"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not username or not password:
+            flash("Inserisci username e password per registrarti.")
+            return render_template("register.html")
+
+        if password != confirm_password:
+            flash("Le password non coincidono.")
+            return render_template("register.html")
+
+        with SessionLocal.begin() as db_session:
+            existing_user = db_session.execute(
+                select(User).where(User.username == username)
+            ).scalar_one_or_none()
+            if existing_user:
+                flash("Username già in uso. Scegline un altro.")
+                return render_template("register.html")
+
+            db_session.add(User(username=username, password_hash=hash_password(password)))
+
+        flash("Registrazione completata! Effettua il login.")
+        return redirect(url_for("login"))
+
+    return render_template("register.html")
 
 
 @app.route("/logout")
