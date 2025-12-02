@@ -34,6 +34,7 @@ class Product:
     category: str
     short_description: str
     price: float
+    status: str = "review"
 
 
 SAMPLE_PIM_DATA: Dict[str, Dict[str, str]] = {
@@ -83,6 +84,24 @@ def generate_short_description(product: Dict[str, str]) -> str:
     return f"{brand} {name} – {snippet}".strip()
 
 
+STATUS_CHOICES = {
+    "ready": {"label": "Pronto", "badge": "success"},
+    "review": {"label": "Richiede revisione", "badge": "warning"},
+    "error": {"label": "Errore", "badge": "danger"},
+}
+
+
+def infer_status(code: str) -> str:
+    """Derive a stable status for a product code to mimic workflow states."""
+
+    score = sum(ord(ch) for ch in code)
+    if score % 10 < 6:
+        return "ready"
+    if score % 10 < 9:
+        return "review"
+    return "error"
+
+
 def fetch_from_pim(codes: List[str]) -> List[Dict[str, str]]:
     results: List[Dict[str, str]] = []
     for code in codes:
@@ -127,6 +146,7 @@ def build_products(
                 category=category,
                 short_description=short_description,
                 price=float(product.get("price", 0.0)),
+                status=infer_status(product["code"]),
             )
         )
     return products
@@ -232,7 +252,43 @@ def results():
         "options",
         {"generate_short_description": True, "recognize_category": True},
     )
-    return render_template("results.html", products=products, options=options)
+
+    # Ensure products carry a status, even for older sessions
+    for product in products:
+        product.setdefault("status", infer_status(product.get("code", "")))
+
+    search_query = request.args.get("q", "").strip().lower()
+    status_filter = request.args.get("status", "").strip()
+    category_filter = request.args.get("category", "").strip()
+
+    filtered_products: List[Dict[str, str]] = []
+    for product in products:
+        code_match = search_query in product.get("code", "").lower()
+        name_match = search_query in product.get("name", "").lower()
+        matches_search = not search_query or code_match or name_match
+        matches_status = not status_filter or product.get("status") == status_filter
+        matches_category = not category_filter or product.get("category", "") == category_filter
+
+        if matches_search and matches_status and matches_category:
+            filtered_products.append(product)
+
+    categories = sorted({p.get("category", "") for p in products if p.get("category")})
+    status_counts = {
+        key: sum(1 for p in filtered_products if p.get("status") == key)
+        for key in STATUS_CHOICES
+    }
+
+    return render_template(
+        "results.html",
+        products=filtered_products,
+        options=options,
+        status_choices=STATUS_CHOICES,
+        status_filter=status_filter,
+        category_filter=category_filter,
+        search_query=search_query,
+        categories=categories,
+        status_counts=status_counts,
+    )
 
 
 @app.route("/prodotto/<code>", methods=["GET", "POST"])
