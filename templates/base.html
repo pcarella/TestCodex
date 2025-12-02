@@ -40,18 +40,176 @@
         min-height: 100vh;
       }
 
-      .navbar {
-        background: linear-gradient(90deg, var(--brand-primary), #b61117);
-        box-shadow: 0 8px 24px rgba(214, 24, 31, 0.35);
+      .app-header {
+        background: #ffffff;
+        border-bottom: 1px solid rgba(45, 42, 50, 0.06);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
+        position: sticky;
+        top: 0;
+        z-index: 10;
       }
 
-      .navbar-brand {
+      .app-header__inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.5rem;
+        padding: 0.85rem 0;
+        flex-wrap: wrap;
+      }
+
+      .app-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .brand-symbol {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #f08c3b, #e86f1e);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 10px 22px rgba(232, 111, 30, 0.35);
+      }
+
+      .brand-symbol__dot {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #ffffff;
+        position: relative;
+      }
+
+      .brand-symbol__dot::after {
+        content: "";
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #f08c3b;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+      }
+
+      .brand-title {
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: #1f2937;
+      }
+
+      .brand-subtitle {
+        color: #6b7280;
+        font-size: 0.9rem;
+      }
+
+      .app-steps {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        flex: 1;
+        min-width: 320px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .app-step {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.55rem 0.85rem;
+        border-radius: 999px;
+        border: 1px solid rgba(45, 42, 50, 0.08);
+        color: #4b5563;
+        text-decoration: none;
+        background: #f9fafb;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.04);
+      }
+
+      .app-step__number {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.95rem;
+      }
+
+      .app-step.active {
+        background: #fff7ea;
+        border-color: rgba(240, 140, 59, 0.4);
+        color: #b45309;
+      }
+
+      .app-step.active .app-step__number {
+        background: linear-gradient(135deg, #f6b000, #f08c3b);
+        color: #fff7ea;
+        box-shadow: 0 10px 18px rgba(240, 140, 59, 0.35);
+      }
+
+      .app-step.completed {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #166534;
+      }
+
+      .app-step.completed .app-step__number {
+        background: #16a34a;
+        color: #ffffff;
+        box-shadow: 0 10px 18px rgba(22, 163, 74, 0.28);
+      }
+
+      .app-step.upcoming:hover {
+        border-color: rgba(45, 42, 50, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .app-user {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.4rem 0.5rem;
+        border-radius: 999px;
+        background: #f9fafb;
+        border: 1px solid rgba(45, 42, 50, 0.06);
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+      }
+
+      .app-user__badge {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #f08c3b, #e86f1e);
+        color: #ffffff;
+        display: grid;
+        place-items: center;
         font-weight: 700;
         letter-spacing: 0.5px;
       }
 
-      .navbar-text {
-        font-weight: 500;
+      .app-user__info {
+        line-height: 1.2;
+      }
+
+      .app-user__name {
+        font-weight: 700;
+        color: #1f2937;
+      }
+
+      .app-user__role {
+        font-size: 0.85rem;
+        color: #6b7280;
+      }
+
+      .app-user__caret {
+        color: #9ca3af;
+        font-size: 1rem;
       }
 
       main.container {
@@ -138,17 +296,56 @@
     </style>
   </head>
   <body>
-    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+    {% set current_endpoint = request.endpoint %}
+    {% set step_lookup = {'login': 0, 'codes': 1, 'results': 2, 'product_detail': 3} %}
+    {% set step_index = step_lookup.get(current_endpoint, 0) %}
+
+    <header class="app-header mb-4">
       <div class="container">
-        <a class="navbar-brand" href="{{ url_for('codes') }}">PIM Enrichment</a>
-        <div class="d-flex">
-          {% if session.get('user') %}
-          <span class="navbar-text me-3">Benvenuto, {{ session['user'] }}</span>
-          <a class="btn btn-outline-light" href="{{ url_for('logout') }}">Logout</a>
-          {% endif %}
+        <div class="app-header__inner">
+          <div class="app-brand">
+            <div class="brand-symbol">
+              <span class="brand-symbol__dot"></span>
+            </div>
+            <div>
+              <div class="brand-title">PIM Assistant</div>
+              <div class="brand-subtitle">Conad Mantova</div>
+            </div>
+          </div>
+
+          <div class="app-steps">
+            {% set steps = [
+              {'label': 'Login', 'endpoint': 'login'},
+              {'label': 'Codice prodotto', 'endpoint': 'codes'},
+              {'label': 'Flusso PIM', 'endpoint': 'results'},
+              {'label': 'Dettaglio', 'endpoint': 'product_detail'}
+            ] %}
+            {% for step in steps %}
+              {% set status = 'completed' if loop.index0 < step_index else 'active' if loop.index0 == step_index else 'upcoming' %}
+              <a
+                class="app-step {{ status }}"
+                href="{{ url_for(step.endpoint) if step.endpoint != current_endpoint else '#' }}"
+              >
+                <span class="app-step__number">{{ loop.index }}</span>
+                <span class="app-step__label">{{ step.label }}</span>
+              </a>
+            {% endfor %}
+          </div>
+
+          <div class="app-user">
+            {% if session.get('user') %}
+              {% set initials = session['user'][:2].upper() %}
+              <div class="app-user__badge">{{ initials }}</div>
+              <div class="app-user__info">
+                <div class="app-user__name">{{ session['user'] }}</div>
+                <div class="app-user__role">Team ESI</div>
+              </div>
+              <span class="app-user__caret">⌄</span>
+            {% endif %}
+          </div>
         </div>
       </div>
-    </nav>
+    </header>
 
     <main class="container">
       {% with messages = get_flashed_messages() %}
