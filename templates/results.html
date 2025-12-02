@@ -110,7 +110,7 @@
   <div>
     <div class="section-title mb-2"><span class="text-warning">●</span> Riepilogo</div>
     <h1 class="h4 mb-1">Prodotti richiesti</h1>
-    <p class="text-muted mb-0">Short description: {{ 'attiva' if options.generate_short_description else 'disattivata' }} · Categoria: {{ 'riconosciuta' if options.recognize_category else 'non calcolata' }}</p>
+    <p class="text-muted mb-0">I dati mostrati provengono dall'API OCC. Tutti i prodotti recuperati partono in stato "Richiede revisione".</p>
   </div>
   <div class="text-end">
     <div class="summary-chip mb-2">
@@ -121,14 +121,21 @@
   </div>
 </div>
 
-<div class="alert alert-info shadow-soft" role="status" aria-live="polite">
-  <div class="fw-semibold">Significato degli stati</div>
-  <ul class="legend-list small mb-0">
-    <li><span class="status-pill status-ready"><span class="status-dot"></span>Pronto</span> Contenuti completi e pronti per il PIM.</li>
-    <li><span class="status-pill status-review"><span class="status-dot"></span>Richiede revisione</span> Controlla titolo o categoria prima di inviare.</li>
-    <li><span class="status-pill status-error"><span class="status-dot"></span>Errore</span> Codice non riconosciuto o dati mancanti.</li>
-  </ul>
-</div>
+  <div class="alert alert-info shadow-soft" role="status" aria-live="polite">
+    <div class="fw-semibold">Significato degli stati</div>
+    <ul class="legend-list small mb-0">
+      <li><span class="status-pill status-ready"><span class="status-dot"></span>Pronto</span> Contenuti completi e pronti per il PIM.</li>
+      <li><span class="status-pill status-review"><span class="status-dot"></span>Richiede revisione</span> Controlla titolo o categoria prima di inviare.</li>
+      <li><span class="status-pill status-error"><span class="status-dot"></span>Errore</span> Codice non riconosciuto o dati mancanti.</li>
+    </ul>
+  </div>
+
+  {% if missing_codes %}
+  <div class="alert alert-warning" role="alert">
+    <div class="fw-semibold">Codici non trovati (API in errore):</div>
+    <p class="mb-0">{{ missing_codes | join(', ') }}</p>
+  </div>
+  {% endif %}
 
 <div class="card brand-card mb-3">
   <div class="card-body">
@@ -147,7 +154,7 @@
         </select>
       </div>
       <div class="col-lg-3 col-md-6">
-        <label class="form-label" for="category">Categoria suggerita</label>
+        <label class="form-label" for="category">Categoria</label>
         <select class="form-select" id="category" name="category">
           <option value="">Tutte le categorie</option>
           {% for category in categories %}
@@ -196,9 +203,11 @@
         <thead>
           <tr>
             <th class="text-uppercase small text-muted">Codice</th>
-            <th class="text-uppercase small text-muted">Nome prodotto</th>
-            <th class="text-uppercase small text-muted">Categoria AI</th>
-            <th class="text-uppercase small text-muted">Short description AI</th>
+            <th class="text-uppercase small text-muted">Categorie</th>
+            <th class="text-uppercase small text-muted">Codice EAN</th>
+            <th class="text-uppercase small text-muted">Denominazione di vendita</th>
+            <th class="text-uppercase small text-muted">Descrizione marketing</th>
+            <th class="text-uppercase small text-muted">Prezzo</th>
             <th class="text-uppercase small text-muted">Stato</th>
             <th class="text-uppercase small text-muted text-end">Azioni</th>
           </tr>
@@ -208,20 +217,20 @@
           <tr class="{% if search_query or status_filter or category_filter %}filtered-highlight{% endif %}">
             <td class="fw-semibold">{{ product.code }}</td>
             <td>
-              <div class="fw-semibold">{{ product.name }}</div>
-              <div class="text-muted small">Brand: {{ product.brand }}</div>
-            </td>
-            <td>
-              {% if product.category %}
-              <div class="fw-semibold">{{ product.category }}</div>
-              <div class="text-muted small">Suggerita dal modello AI</div>
+              {% if product.categories %}
+                <ul class="mb-0 small text-muted">
+                  {% for category in product.categories %}
+                    <li><span class="fw-semibold">{{ category.code }}</span> — {{ category.name }}</li>
+                  {% endfor %}
+                </ul>
               {% else %}
-              <span class="text-muted">Categoria non calcolata</span>
+              <span class="text-muted small">Nessuna categoria disponibile</span>
               {% endif %}
             </td>
-            <td class="small text-muted" style="max-width: 280px;">
-              {{ product.short_description or 'Short description non generata per questo prodotto.' }}
-            </td>
+            <td class="text-muted small">{{ product.codice_ean or '—' }}</td>
+            <td class="fw-semibold">{{ product.denominazione_vendita or '—' }}</td>
+            <td class="small text-muted" style="max-width: 280px;">{{ product.descrizione_marketing or '—' }}</td>
+            <td class="fw-semibold">€ {{ '%.2f'|format(product.price) }}</td>
             <td>
               {% set status_key = product.status %}
               {% set status_meta = status_choices.get(status_key, {'label': status_key, 'badge': 'secondary'}) %}
@@ -237,7 +246,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="6" class="text-center text-muted py-4">Nessun prodotto corrisponde ai filtri applicati.</td>
+            <td colspan="8" class="text-center text-muted py-4">Nessun prodotto corrisponde ai filtri applicati.</td>
           </tr>
           {% endfor %}
         </tbody>

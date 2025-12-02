@@ -29,8 +29,8 @@
         <div class="d-flex align-items-start justify-content-between">
           <div>
             <p class="text-uppercase text-muted fw-semibold mb-1 small">Anteprima</p>
-            <h2 class="h5 mb-0">{{ product.name }}</h2>
-            <p class="text-secondary mb-0">{{ product.brand }}</p>
+            <h2 class="h5 mb-0">{{ product.denominazione_vendita or 'Denominazione non disponibile' }}</h2>
+            <p class="text-secondary mb-0">EAN: {{ product.codice_ean or '—' }}</p>
           </div>
           <div class="badge bg-white text-warning-emphasis border border-warning">Cod. {{ product.code }}</div>
         </div>
@@ -39,18 +39,29 @@
         <div class="rounded-4 bg-body-secondary p-3">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <span class="text-muted small">Categoria</span>
-            <span class="badge text-bg-light border">{{ product.category }}</span>
+            {% if product.categories %}
+            <span class="badge text-bg-light border">{{ product.categories[0].name }}</span>
+            {% else %}
+            <span class="badge text-bg-light border">—</span>
+            {% endif %}
           </div>
           <div class="d-flex justify-content-between align-items-center mb-2">
             <span class="text-muted small">Prezzo</span>
             <div class="fw-semibold fs-5 text-success">€ {{ '%.2f'|format(product.price) }}</div>
           </div>
-          <div class="text-muted small">Short description</div>
-          <p class="mb-0 fw-medium">{{ product.short_description }}</p>
+          <div class="text-muted small">Descrizione marketing</div>
+          <p class="mb-0 fw-medium">{{ product.descrizione_marketing }}</p>
         </div>
         <div>
           <p class="text-muted text-uppercase small fw-semibold mb-2">Dettaglio</p>
-          <p class="mb-0 text-body-secondary">{{ product.long_description }}</p>
+          <p class="mb-0 text-body-secondary">Codici categoria disponibili:</p>
+          <ul class="mb-0 small text-muted">
+            {% for category in product.categories %}
+            <li><strong>{{ category.code }}</strong> — {{ category.name }}</li>
+            {% else %}
+            <li>Nessuna categoria presente nella risposta.</li>
+            {% endfor %}
+          </ul>
         </div>
       </div>
     </div>
@@ -65,16 +76,8 @@
       <div class="card-body">
         <form method="post" class="row g-4">
           <div class="col-12">
-            <label class="form-label fw-semibold" for="name">Nome</label>
-            <input type="text" class="form-control form-control-lg" id="name" name="name" value="{{ product.name }}" required />
-          </div>
-          <div class="col-md-6">
-            <label class="form-label fw-semibold" for="brand">Brand</label>
-            <input type="text" class="form-control form-control-lg" id="brand" name="brand" value="{{ product.brand }}" required />
-          </div>
-          <div class="col-md-6">
-            <label class="form-label fw-semibold" for="category">Categoria</label>
-            <input type="text" class="form-control form-control-lg" id="category" name="category" value="{{ product.category }}" required />
+            <label class="form-label fw-semibold" for="denominazione_vendita">Denominazione di vendita</label>
+            <input type="text" class="form-control form-control-lg" id="denominazione_vendita" name="denominazione_vendita" value="{{ product.denominazione_vendita }}" required />
           </div>
           <div class="col-md-6">
             <label class="form-label fw-semibold" for="price">Prezzo</label>
@@ -84,12 +87,8 @@
             </div>
           </div>
           <div class="col-md-6">
-            <label class="form-label fw-semibold" for="short_description">Short description</label>
-            <textarea class="form-control" id="short_description" name="short_description" rows="2" required placeholder="Esempio: {{ product.brand }} {{ product.name }} – evidenzia il beneficio principale">{{ product.short_description }}</textarea>
-          </div>
-          <div class="col-12">
-            <label class="form-label fw-semibold" for="long_description">Descrizione estesa</label>
-            <textarea class="form-control" id="long_description" name="long_description" rows="5" required placeholder="Aggiungi informazioni su materiali, utilizzo e condizioni di garanzia.">{{ product.long_description }}</textarea>
+            <label class="form-label fw-semibold" for="descrizione_marketing">Descrizione marketing</label>
+            <textarea class="form-control" id="descrizione_marketing" name="descrizione_marketing" rows="4" required placeholder="Inserisci la descrizione marketing">{{ product.descrizione_marketing }}</textarea>
           </div>
           <div class="d-flex justify-content-between align-items-center pt-2">
             <div class="d-flex align-items-center gap-2 text-secondary">

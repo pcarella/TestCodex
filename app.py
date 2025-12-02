@@ -6,7 +6,8 @@ import io
 import os
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+from xml.etree import ElementTree
 
 from flask import (
     Flask,
@@ -19,11 +20,19 @@ from flask import (
 )
 from sqlalchemy import Column, Integer, String, create_engine, select
 from sqlalchemy.orm import declarative_base, sessionmaker
+import requests
 
 app = Flask(__name__)
 app.secret_key = "dev-secret-key"
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
+API_TOKEN = os.getenv(
+    "CONAD_API_TOKEN", "vm8ZQy9FyAir3r4ssRv787mDnJc"
+)
+API_URL_TEMPLATE = (
+    "https://api.cfp5zmx7oc-conadscrl1-s2-public.model-t.cc.commerce.ondemand.com/occ/v2/conad/products/"
+    "{code}?fields=FULL&storeId=010040"
+)
 engine = create_engine(
     DATABASE_URL,
     future=True,
@@ -63,60 +72,12 @@ init_db()
 @dataclass
 class Product:
     code: str
-    name: str
-    brand: str
-    long_description: str
-    category: str
-    short_description: str
+    categories: List[Dict[str, str]]
+    codice_ean: str
+    denominazione_vendita: str
+    descrizione_marketing: str
     price: float
     status: str = "review"
-
-
-SAMPLE_PIM_DATA: Dict[str, Dict[str, str]] = {
-    "P001": {
-        "name": "Wireless Mouse",
-        "brand": "ClickCo",
-        "description": "Ergonomic wireless mouse with adjustable DPI and silent buttons.",
-        "price": 24.99,
-    },
-    "P002": {
-        "name": "Mechanical Keyboard",
-        "brand": "TypeMaster",
-        "description": "Full-size mechanical keyboard with blue switches and RGB lighting.",
-        "price": 89.0,
-    },
-    "P003": {
-        "name": "Noise Cancelling Headphones",
-        "brand": "SoundSphere",
-        "description": "Over-ear headphones with active noise cancellation and 30-hour battery life.",
-        "price": 159.0,
-    },
-}
-
-
-CATEGORY_KEYWORDS: Dict[str, List[str]] = {
-    "Accessories": ["mouse", "keyboard", "cable", "adapter"],
-    "Audio": ["headphones", "earbuds", "speaker", "audio"],
-    "Computers": ["laptop", "notebook", "desktop"],
-}
-
-
-def classify_category(name: str, description: str) -> str:
-    combined = f"{name} {description}".lower()
-    for category, keywords in CATEGORY_KEYWORDS.items():
-        if any(keyword in combined for keyword in keywords):
-            return category
-    return "Miscellaneous"
-
-
-def generate_short_description(product: Dict[str, str]) -> str:
-    brand = product.get("brand", "")
-    name = product.get("name", "")
-    description = product.get("description", "")
-    snippet = description[:90].rstrip()
-    if len(description) > 90:
-        snippet += "..."
-    return f"{brand} {name} – {snippet}".strip()
 
 
 STATUS_CHOICES = {
@@ -126,65 +87,83 @@ STATUS_CHOICES = {
 }
 
 
-def infer_status(code: str) -> str:
-    """Derive a stable status for a product code to mimic workflow states."""
-
-    score = sum(ord(ch) for ch in code)
-    if score % 10 < 6:
-        return "ready"
-    if score % 10 < 9:
-        return "review"
-    return "error"
-
-
-def fetch_from_pim(codes: List[str]) -> List[Dict[str, str]]:
-    results: List[Dict[str, str]] = []
-    for code in codes:
-        product = SAMPLE_PIM_DATA.get(
-            code,
+def parse_categories(product_xml: ElementTree.Element) -> List[Dict[str, str]]:
+    categories: List[Dict[str, str]] = []
+    for category_node in product_xml.findall("categories"):
+        categories.append(
             {
-                "name": f"Product {code}",
-                "brand": "GenericCo",
-                "description": "Placeholder description awaiting enrichment.",
-                "price": 0.0,
-            },
+                "code": category_node.findtext("code", default=""),
+                "name": category_node.findtext("name", default=""),
+            }
         )
-        results.append({"code": code, **product})
-    return results
+    return categories
 
 
-def build_products(
-    codes: List[str],
-    *,
-    generate_short_description_enabled: bool = True,
-    recognize_category: bool = True,
-) -> List[Product]:
-    raw_products = fetch_from_pim(codes)
+def fetch_product_from_api(code: str) -> Optional[Dict[str, str]]:
+    url = API_URL_TEMPLATE.format(code=code)
+    headers = {
+        "accept": "application/xml",
+        "Authorization": f"Bearer {API_TOKEN}",
+    }
+    response = requests.get(url, headers=headers, timeout=10)
+    if response.status_code != 200:
+        return None
+
+    try:
+        root = ElementTree.fromstring(response.content)
+    except ElementTree.ParseError:
+        return None
+
+    price_value = root.findtext("price/value", default="0")
+    try:
+        price_float = float(price_value)
+    except ValueError:
+        price_float = 0.0
+
+    return {
+        "code": root.findtext("code", default=code),
+        "categories": parse_categories(root),
+        "codice_ean": root.findtext("codiceEAN", default=""),
+        "denominazione_vendita": root.findtext("denominazioneDiVendita", default=""),
+        "descrizione_marketing": root.findtext("descrizioneMarketing", default=""),
+        "price": price_float,
+    }
+
+
+def build_products(codes: List[str]) -> Tuple[List[Product], List[str]]:
     products: List[Product] = []
-    for product in raw_products:
-        category = (
-            classify_category(product["name"], product["description"])
-            if recognize_category
-            else ""
-        )
-        short_description = (
-            generate_short_description(product)
-            if generate_short_description_enabled
-            else ""
-        )
+    missing_codes: List[str] = []
+
+    for code in codes:
+        product_data = fetch_product_from_api(code)
+        if not product_data:
+            missing_codes.append(code)
+            products.append(
+                Product(
+                    code=code,
+                    categories=[],
+                    codice_ean="",
+                    denominazione_vendita="",
+                    descrizione_marketing="",
+                    price=0.0,
+                    status="error",
+                )
+            )
+            continue
+
         products.append(
             Product(
-                code=product["code"],
-                name=product["name"],
-                brand=product["brand"],
-                long_description=product["description"],
-                category=category,
-                short_description=short_description,
-                price=float(product.get("price", 0.0)),
-                status=infer_status(product["code"]),
+                code=product_data["code"],
+                categories=product_data["categories"],
+                codice_ean=product_data["codice_ean"],
+                denominazione_vendita=product_data["denominazione_vendita"],
+                descrizione_marketing=product_data["descrizione_marketing"],
+                price=product_data["price"],
+                status="review",
             )
         )
-    return products
+
+    return products, missing_codes
 
 
 def parse_codes(raw_codes: str, csv_file) -> List[str]:
@@ -310,23 +289,14 @@ def codes():
     if request.method == "POST":
         raw_codes = request.form.get("codes", "")
         csv_file = request.files.get("csv_file")
-        generate_short_description = bool(request.form.get("generate_short_description"))
-        recognize_category = bool(request.form.get("recognize_category"))
 
         codes = parse_codes(raw_codes, csv_file)
         if not codes:
             flash("Inserisci almeno un codice prodotto.")
         else:
-            products = build_products(
-                codes,
-                generate_short_description_enabled=generate_short_description,
-                recognize_category=recognize_category,
-            )
+            products, missing_codes = build_products(codes)
             session["products"] = [product.__dict__ for product in products]
-            session["options"] = {
-                "generate_short_description": generate_short_description,
-                "recognize_category": recognize_category,
-            }
+            session["missing_codes"] = missing_codes
             return redirect(url_for("results"))
     return render_template("codes.html")
 
@@ -338,14 +308,10 @@ def results():
     if not products:
         flash("Nessun prodotto richiesto. Inserisci i codici per continuare.")
         return redirect(url_for("codes"))
-    options = session.get(
-        "options",
-        {"generate_short_description": True, "recognize_category": True},
-    )
+    missing_codes = session.get("missing_codes", [])
 
-    # Ensure products carry a status, even for older sessions
     for product in products:
-        product.setdefault("status", infer_status(product.get("code", "")))
+        product.setdefault("status", "review")
 
     search_query = request.args.get("q", "").strip().lower()
     status_filter = request.args.get("status", "").strip()
@@ -354,15 +320,23 @@ def results():
     filtered_products: List[Dict[str, str]] = []
     for product in products:
         code_match = search_query in product.get("code", "").lower()
-        name_match = search_query in product.get("name", "").lower()
+        name_match = search_query in product.get("denominazione_vendita", "").lower()
         matches_search = not search_query or code_match or name_match
         matches_status = not status_filter or product.get("status") == status_filter
-        matches_category = not category_filter or product.get("category", "") == category_filter
+        category_names = {c.get("name", "") for c in product.get("categories", [])}
+        matches_category = not category_filter or category_filter in category_names
 
         if matches_search and matches_status and matches_category:
             filtered_products.append(product)
 
-    categories = sorted({p.get("category", "") for p in products if p.get("category")})
+    categories = sorted(
+        {
+            c.get("name", "")
+            for p in products
+            for c in p.get("categories", [])
+            if c.get("name")
+        }
+    )
     status_counts = {
         key: sum(1 for p in filtered_products if p.get("status") == key)
         for key in STATUS_CHOICES
@@ -371,7 +345,7 @@ def results():
     return render_template(
         "results.html",
         products=filtered_products,
-        options=options,
+        missing_codes=missing_codes,
         status_choices=STATUS_CHOICES,
         status_filter=status_filter,
         category_filter=category_filter,
@@ -395,18 +369,20 @@ def product_detail(code: str):
         return redirect(url_for("results"))
 
     if request.method == "POST":
+        try:
+            price_value = float(request.form.get("price", product.get("price", 0.0)))
+        except (TypeError, ValueError):
+            price_value = product.get("price", 0.0)
+
         product.update(
             {
-                "name": request.form.get("name", product["name"]),
-                "brand": request.form.get("brand", product["brand"]),
-                "long_description": request.form.get(
-                    "long_description", product.get("long_description", "")
+                "denominazione_vendita": request.form.get(
+                    "denominazione_vendita", product.get("denominazione_vendita", "")
                 ),
-                "category": request.form.get("category", product.get("category", "")),
-                "short_description": request.form.get(
-                    "short_description", product.get("short_description", "")
+                "descrizione_marketing": request.form.get(
+                    "descrizione_marketing", product.get("descrizione_marketing", "")
                 ),
-                "price": float(request.form.get("price", product.get("price", 0.0))),
+                "price": price_value,
             }
         )
 
