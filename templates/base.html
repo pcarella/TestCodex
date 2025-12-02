@@ -322,9 +322,14 @@
             ] %}
             {% for step in steps %}
               {% set status = 'completed' if loop.index0 < step_index else 'active' if loop.index0 == step_index else 'upcoming' %}
+              {% if step.endpoint == 'product_detail' %}
+                {% set href = url_for(step.endpoint, code=request.view_args['code']) if current_endpoint == 'product_detail' else '#' %}
+              {% else %}
+                {% set href = url_for(step.endpoint) if step.endpoint != current_endpoint else '#' %}
+              {% endif %}
               <a
                 class="app-step {{ status }}"
-                href="{{ url_for(step.endpoint) if step.endpoint != current_endpoint else '#' }}"
+                href="{{ href }}"
               >
                 <span class="app-step__number">{{ loop.index }}</span>
                 <span class="app-step__label">{{ step.label }}</span>
