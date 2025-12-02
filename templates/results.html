@@ -91,6 +91,19 @@
   .table-responsive {
     border-radius: 16px;
   }
+
+  .table tr.filtered-highlight {
+    background: #fff9e6;
+  }
+
+  .legend-list {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 0;
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
 </style>
 
 <div class="d-flex flex-wrap gap-3 justify-content-between align-items-start mb-3">
@@ -106,6 +119,15 @@
     </div>
     <div class="small text-muted">{{ ready_count }} pronti, {{ review_count }} da rivedere, {{ error_count }} in errore.</div>
   </div>
+</div>
+
+<div class="alert alert-info shadow-soft" role="status" aria-live="polite">
+  <div class="fw-semibold">Significato degli stati</div>
+  <ul class="legend-list small mb-0">
+    <li><span class="status-pill status-ready"><span class="status-dot"></span>Pronto</span> Contenuti completi e pronti per il PIM.</li>
+    <li><span class="status-pill status-review"><span class="status-dot"></span>Richiede revisione</span> Controlla titolo o categoria prima di inviare.</li>
+    <li><span class="status-pill status-error"><span class="status-dot"></span>Errore</span> Codice non riconosciuto o dati mancanti.</li>
+  </ul>
 </div>
 
 <div class="card brand-card mb-3">
@@ -150,15 +172,22 @@
   </div>
 </div>
 
-<div class="card brand-card">
-  <div class="card-body">
-    <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-      <div class="d-flex align-items-center gap-2 text-muted small">
+  <div class="card brand-card">
+    <div class="card-body">
+      <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+      <div class="d-flex align-items-center gap-3 text-muted small">
         <span class="text-muted">{{ total }} prodotti selezionati</span>
+        <span class="badge rounded-pill text-bg-light border">Filtro attivo: {{ 'sì' if status_filter or category_filter or search_query else 'no' }}</span>
       </div>
       <div class="d-flex gap-2">
-        <button class="btn btn-outline-secondary" type="button">Esporta risultati</button>
-        <button class="btn btn-primary" type="button">Salva tutti su PIM</button>
+        <button class="btn btn-outline-secondary" type="button" id="export-btn">
+          <span class="spinner-border spinner-border-sm align-text-bottom me-2 d-none" role="status" aria-hidden="true"></span>
+          <span class="btn-label">Esporta risultati</span>
+        </button>
+        <button class="btn btn-primary" type="button" id="save-btn">
+          <span class="spinner-border spinner-border-sm align-text-bottom me-2 d-none" role="status" aria-hidden="true"></span>
+          <span class="btn-label">Salva tutti su PIM</span>
+        </button>
       </div>
     </div>
 
@@ -176,7 +205,7 @@
         </thead>
         <tbody>
           {% for product in products %}
-          <tr>
+          <tr class="{% if search_query or status_filter or category_filter %}filtered-highlight{% endif %}">
             <td class="fw-semibold">{{ product.code }}</td>
             <td>
               <div class="fw-semibold">{{ product.name }}</div>
@@ -216,4 +245,27 @@
     </div>
   </div>
 </div>
+<script>
+  (function () {
+    const wireLoading = (buttonId, successLabel) => {
+      const btn = document.getElementById(buttonId);
+      if (!btn) return;
+      const spinner = btn.querySelector(".spinner-border");
+      const label = btn.querySelector(".btn-label");
+      btn.addEventListener("click", () => {
+        btn.setAttribute("disabled", "disabled");
+        spinner?.classList.remove("d-none");
+        label.textContent = successLabel;
+        setTimeout(() => {
+          btn.removeAttribute("disabled");
+          spinner?.classList.add("d-none");
+          label.textContent = btn.id === "export-btn" ? "Esporta risultati" : "Salva tutti su PIM";
+        }, 1200);
+      });
+    };
+
+    wireLoading("export-btn", "Preparazione file...");
+    wireLoading("save-btn", "Invio in corso...");
+  })();
+</script>
 {% endblock %}

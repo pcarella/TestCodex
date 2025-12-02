@@ -54,20 +54,27 @@
   }
 
   .btn-login {
-    background: linear-gradient(120deg, #f08c3b, #e86f1e);
+    background: var(--brand-gradient);
     border: none;
     border-radius: 999px;
     padding: 0.85rem 2rem;
     font-weight: 700;
-    box-shadow: 0 14px 30px rgba(232, 111, 30, 0.35);
+    box-shadow: 0 14px 30px rgba(214, 24, 31, 0.35);
   }
 
   .btn-login:hover {
-    background: linear-gradient(120deg, #e86f1e, #d45a11);
+    background: linear-gradient(120deg, #b61117, #8e0d14);
   }
 
   .login-footer {
     color: #9ca3af;
+  }
+
+  .helper-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #4b5563;
   }
 </style>
 
@@ -78,10 +85,10 @@
         <p class="text-uppercase text-muted fw-semibold mb-1 small">Accedi</p>
         <h1 class="login-title mb-2">Benvenuto</h1>
         <p class="login-subtitle mb-0">
-          Entra per gestire le schede prodotto dal PIM.
+          Entra per gestire le schede prodotto dal PIM. Completa i campi per continuare.
         </p>
       </div>
-      <form method="post" class="login-form">
+      <form method="post" class="login-form" novalidate>
         <div class="mb-3">
           <label class="form-label" for="username">Email o username</label>
           <input
@@ -92,6 +99,7 @@
             placeholder="demo"
             required
           />
+          <div class="form-text helper-text">Usa <code>demo</code> come utente di prova.</div>
         </div>
         <div class="mb-3">
           <label class="form-label" for="password">Password</label>
@@ -103,6 +111,7 @@
             placeholder="••••"
             required
           />
+          <div class="form-text helper-text">Suggerimento: la password demo è <code>demo</code>.</div>
         </div>
         <div class="d-flex align-items-center justify-content-between login-actions mb-3">
           <div class="form-check">
@@ -115,7 +124,7 @@
           <button type="submit" class="btn btn-login text-white">Accedi</button>
         </div>
       </form>
-      <p class="login-footer text-center mt-3">Accesso riservato agli utenti interni.</p>
+      <p class="login-footer text-center mt-3">Accesso riservato agli utenti interni. Hai bisogno di aiuto? <a href="#">Scopri come funziona</a>.</p>
     </div>
   </div>
 </div>
