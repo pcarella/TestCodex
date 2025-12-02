@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import hashlib
 import io
 import os
 import re
+import secrets
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 from xml.etree import ElementTree
@@ -18,8 +20,8 @@ from flask import (
     session,
     url_for,
 )
-from sqlalchemy import Column, Integer, String, create_engine, select
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, create_engine, select
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 import requests
 
 app = Flask(__name__)
@@ -48,10 +50,65 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(64), nullable=False)
+    reset_tokens = relationship(
+        "PasswordResetToken", cascade="all, delete-orphan", back_populates="user"
+    )
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token = Column(String(128), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="reset_tokens")
 
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+def send_reset_email(recipient: str, reset_url: str) -> None:
+    """
+    Send the password reset email.
+
+    In a production setup this should be integrated with a transactional email
+    provider. For this demo we log the link to the console to avoid exposing
+    SMTP credentials and to keep the feature easily testable.
+    """
+
+    message = (
+        "Richiesta di reset password\n\n"
+        "Clicca sul link seguente per impostare una nuova password:"
+        f"\n{reset_url}\n\n"
+        "Il link scade tra un'ora. Se non hai richiesto tu il reset, ignora questa email."
+    )
+    print(f"[PasswordReset] Invio email a {recipient}:\n{message}")
+
+
+def persist_reset_token(user_id: int) -> str:
+    token = secrets.token_urlsafe(48)
+    expires_at = dt.datetime.utcnow() + dt.timedelta(hours=1)
+
+    with SessionLocal.begin() as db_session:
+        existing_tokens = db_session.execute(
+            select(PasswordResetToken).where(PasswordResetToken.user_id == user_id)
+        ).scalars()
+        for existing_token in existing_tokens:
+            db_session.delete(existing_token)
+
+        db_session.add(
+            PasswordResetToken(
+                user_id=user_id,
+                token=token,
+                expires_at=expires_at,
+            )
+        )
+
+    return token
 
 
 def init_db() -> None:
@@ -205,7 +262,13 @@ def login_required(view_func):
 def ensure_authenticated():
     """Redirect users to the login page if they are not authenticated."""
 
-    exempt_endpoints = {"login", "register", "static"}
+    exempt_endpoints = {
+        "login",
+        "register",
+        "forgot_password",
+        "reset_password",
+        "static",
+    }
     if request.endpoint in exempt_endpoints:
         return None
 
@@ -276,11 +339,86 @@ def register():
     return render_template("register.html")
 
 
+@app.route("/password-dimenticata", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        identifier = request.form.get("username", "").strip()
+        if not identifier:
+            flash("Inserisci l'email o l'username associato all'account.")
+            return render_template("forgot_password.html")
+
+        with SessionLocal() as db_session:
+            user = db_session.execute(
+                select(User).where(User.username == identifier)
+            ).scalar_one_or_none()
+
+        if user:
+            token = persist_reset_token(user.id)
+            reset_url = url_for("reset_password", token=token, _external=True)
+            send_reset_email(identifier, reset_url)
+
+        flash(
+            "Se l'account esiste, riceverai un'email con il link per reimpostare la password."
+        )
+        return redirect(url_for("login"))
+
+    return render_template("forgot_password.html")
+
+
 @app.route("/logout")
 @login_required
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token: str):
+    with SessionLocal() as db_session:
+        reset_request = db_session.execute(
+            select(PasswordResetToken).where(PasswordResetToken.token == token)
+        ).scalar_one_or_none()
+
+        if not reset_request or reset_request.expires_at < dt.datetime.utcnow():
+            flash("Link di reset non valido o scaduto. Richiedi nuovamente il reset.")
+            return redirect(url_for("forgot_password"))
+
+        user = db_session.get(User, reset_request.user_id)
+
+    if request.method == "POST":
+        new_password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if len(new_password) < 8:
+            flash("La password deve contenere almeno 8 caratteri.")
+            return render_template("reset_password.html", username=user.username, token=token)
+
+        if new_password != confirm_password:
+            flash("Le password non coincidono.")
+            return render_template("reset_password.html", username=user.username, token=token)
+
+        with SessionLocal.begin() as db_session:
+            reset_request = db_session.execute(
+                select(PasswordResetToken).where(PasswordResetToken.token == token)
+            ).scalar_one_or_none()
+
+            if not reset_request or reset_request.expires_at < dt.datetime.utcnow():
+                flash("Link di reset non valido o scaduto. Richiedi nuovamente il reset.")
+                return redirect(url_for("forgot_password"))
+
+            user_db = db_session.get(User, reset_request.user_id)
+            user_db.password_hash = hash_password(new_password)
+
+            tokens = db_session.execute(
+                select(PasswordResetToken).where(PasswordResetToken.user_id == user_db.id)
+            ).scalars()
+            for token_instance in tokens:
+                db_session.delete(token_instance)
+
+        flash("Password aggiornata con successo. Accedi con le nuove credenziali.")
+        return redirect(url_for("login"))
+
+    return render_template("reset_password.html", username=user.username, token=token)
 
 
 @app.route("/codici", methods=["GET", "POST"])
