@@ -142,7 +142,14 @@
             </select>
           </div>
           <div class="col-md-6">
-            <label class="form-label" for="categoria_ai">Categoria suggerita da AI</label>
+            <label class="form-label d-flex align-items-center gap-2" for="categoria_ai">
+              Categoria suggerita da AI
+              {% if product.ai_category %}
+              {% set ai = product.ai_category %}
+              <span class="badge text-bg-warning text-dark">{{ ai.category_2_name or ai.category_1_name }}</span>
+              <span class="badge text-bg-light border">{{ ai.category_2_id }}</span>
+              {% endif %}
+            </label>
             <select id="categoria_ai" class="form-select form-select-lg">
               {% if product.categories %}
               {% for category in product.categories %}
@@ -153,6 +160,9 @@
               {% endif %}
             </select>
             <small class="text-muted d-block mt-1">Seleziona l'opzione di PIM più appropriata</small>
+            {% if product.ai_category %}
+            <p class="text-muted small mb-0 mt-1">Motivazione AI: {{ product.ai_category.reason }}</p>
+            {% endif %}
           </div>
           <div class="col-md-6">
             <label class="form-label" for="price">Prezzo al kg</label>

@@ -4,6 +4,7 @@ import csv
 import datetime as dt
 import hashlib
 import io
+import json
 import os
 import re
 import secrets
@@ -20,6 +21,7 @@ from flask import (
     session,
     url_for,
 )
+from openai import OpenAI
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, create_engine, select
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 import requests
@@ -31,6 +33,9 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
 API_TOKEN = os.getenv(
     "CONAD_API_TOKEN", "vm8ZQy9FyAir3r4ssRv787mDnJc"
 )
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_AGENT_ID = os.getenv("OPENAI_AGENT_ID", "asst_o1LCzpNKALkmUwTGao1x0Mjp")
 API_URL_TEMPLATE = (
     "https://api.cfp5zmx7oc-conadscrl1-s2-public.model-t.cc.commerce.ondemand.com/occ/v2/conad/products/"
     "{code}?fields=FULL&storeId=010040"
@@ -42,6 +47,7 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 Base = declarative_base()
+openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 
 class User(Base):
@@ -134,6 +140,7 @@ class Product:
     denominazione_vendita: str
     descrizione_marketing: str
     price: float
+    ai_category: Optional[Dict[str, str]] = None
     status: str = "review"
 
 
@@ -154,6 +161,69 @@ def parse_categories(product_xml: ElementTree.Element) -> List[Dict[str, str]]:
             }
         )
     return categories
+
+
+def classify_product_category(product_data: Dict[str, str]) -> Optional[Dict[str, str]]:
+    if not openai_client:
+        print("[OpenAI] OPENAI_API_KEY non configurata: salto la classificazione AI.")
+        return None
+
+    payload = {
+        "code": product_data.get("code", ""),
+        "codice_ean": product_data.get("codice_ean", ""),
+        "denominazione_vendita": product_data.get("denominazione_vendita", ""),
+        "descrizione_marketing": product_data.get("descrizione_marketing", ""),
+        "price": product_data.get("price", 0.0),
+    }
+    print(f"[OpenAI] Richiesta classificazione: {json.dumps(payload, ensure_ascii=False)}")
+
+    try:
+        response = openai_client.responses.create(
+            agent_id=OPENAI_AGENT_ID,
+            model=OPENAI_MODEL,
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": (
+                                "Restituisci SEMPRE e SOLO un JSON con le chiavi "
+                                "category_2_id, category_2_name, category_1_name, reason "
+                                "basandoti sui dati prodotto seguenti: "
+                                f"{json.dumps(payload, ensure_ascii=False)}"
+                            ),
+                        }
+                    ],
+                }
+            ],
+        )
+    except Exception as exc:
+        print(f"[OpenAI] Errore durante la classificazione: {exc}")
+        return None
+
+    print(f"[OpenAI] Risposta classificazione: {response}")
+
+    try:
+        if hasattr(response, "output_text") and response.output_text:
+            raw_text = response.output_text.strip()
+        else:
+            output_blocks = getattr(response, "output", None) or []
+            first_block = output_blocks[0]
+            content_list = getattr(first_block, "content", None) or []
+            raw_text = (getattr(content_list[0], "text", "") or "").strip()
+
+        parsed = json.loads(raw_text)
+        required_keys = {"category_2_id", "category_2_name", "category_1_name", "reason"}
+        if not required_keys.issubset(parsed):
+            missing = required_keys - set(parsed)
+            print(f"[OpenAI] Risposta JSON mancante di campi obbligatori: {missing}")
+            return None
+
+        return {key: str(parsed.get(key, "")).strip() for key in required_keys}
+    except (AttributeError, IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        print(f"[OpenAI] Impossibile leggere la risposta AI come JSON: {exc}")
+        return None
 
 
 def fetch_product_from_api(code: str) -> Optional[Dict[str, str]]:
@@ -177,7 +247,7 @@ def fetch_product_from_api(code: str) -> Optional[Dict[str, str]]:
     except ValueError:
         price_float = 0.0
 
-    return {
+    product_data = {
         "code": root.findtext("code", default=code),
         "categories": parse_categories(root),
         "codice_ean": root.findtext("codiceEAN", default=""),
@@ -185,6 +255,18 @@ def fetch_product_from_api(code: str) -> Optional[Dict[str, str]]:
         "descrizione_marketing": root.findtext("descrizioneMarketing", default=""),
         "price": price_float,
     }
+
+    ai_category = classify_product_category(product_data)
+    if ai_category:
+        product_data["ai_category"] = ai_category
+        product_data.setdefault("categories", []).append(
+            {
+                "code": ai_category.get("category_2_id", "ai"),
+                "name": ai_category.get("category_2_name", "Suggerita AI"),
+            }
+        )
+
+    return product_data
 
 
 def build_products(codes: List[str]) -> Tuple[List[Product], List[str]]:
@@ -216,6 +298,7 @@ def build_products(codes: List[str]) -> Tuple[List[Product], List[str]]:
                 denominazione_vendita=product_data["denominazione_vendita"],
                 descrizione_marketing=product_data["descrizione_marketing"],
                 price=product_data["price"],
+                ai_category=product_data.get("ai_category"),
                 status="review",
             )
         )
