@@ -187,6 +187,20 @@ def login_required(view_func):
     return wrapper
 
 
+@app.before_request
+def ensure_authenticated():
+    """Redirect users to the login page if they are not authenticated."""
+
+    exempt_endpoints = {"login", "static"}
+    if request.endpoint in exempt_endpoints:
+        return None
+
+    if not session.get("user"):
+        return redirect(url_for("login"))
+
+    return None
+
+
 @app.route("/", methods=["GET"])
 def home():
     if session.get("user"):
@@ -196,6 +210,9 @@ def home():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    if session.get("user"):
+        return redirect(url_for("codes"))
+
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")

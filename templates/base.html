@@ -323,15 +323,20 @@
             {% endfor %}
           </div>
 
-          <div class="app-user">
+          <div class="d-flex align-items-center gap-3">
+            <div class="app-user">
+              {% if session.get('user') %}
+                {% set initials = session['user'][:2].upper() %}
+                <div class="app-user__badge">{{ initials }}</div>
+                <div class="app-user__info">
+                  <div class="app-user__name">{{ session['user'] }}</div>
+                  <div class="app-user__role">Team ESI</div>
+                </div>
+                <span class="app-user__caret">⌄</span>
+              {% endif %}
+            </div>
             {% if session.get('user') %}
-              {% set initials = session['user'][:2].upper() %}
-              <div class="app-user__badge">{{ initials }}</div>
-              <div class="app-user__info">
-                <div class="app-user__name">{{ session['user'] }}</div>
-                <div class="app-user__role">Team ESI</div>
-              </div>
-              <span class="app-user__caret">⌄</span>
+              <a class="btn btn-outline-secondary" href="{{ url_for('logout') }}">Logout</a>
             {% endif %}
           </div>
         </div>
