@@ -110,8 +110,12 @@
             <input type="text" class="form-control form-control-lg" id="denominazione_vendita" name="denominazione_vendita" value="{{ product.denominazione_vendita }}" required />
           </div>
           <div class="col-md-6">
-            <label class="form-label" for="brand">Brand</label>
-            <input type="text" class="form-control form-control-lg" id="brand" value="{{ (product.categories[0].name if product.categories else '—') }}" readonly />
+            <label class="form-label" for="marchio">Marchio</label>
+            <input type="text" class="form-control form-control-lg" id="marchio" value="{{ product.marchio or '—' }}" readonly />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="nome_marca">Nome marca</label>
+            <input type="text" class="form-control form-control-lg" id="nome_marca" value="{{ product.nome_marca or '—' }}" readonly />
           </div>
           <div class="col-md-6">
             <label class="form-label" for="stato_pubblicazione">Stato pubblicazione</label>
@@ -180,6 +184,10 @@
             <textarea class="form-control form-control-lg" id="descrizione_marketing" name="descrizione_marketing" rows="5" required placeholder="Inserisci la descrizione marketing">{{ product.descrizione_marketing }}</textarea>
             <small class="text-muted d-block mt-1">Massimo 250 caratteri. Test brevi, formali e chiari, ideali per i primi passi di tutti i giorni, caldi come una giacca invernale.</small>
           </div>
+          <div class="col-12">
+            <label class="form-label" for="description">Descrizione PIM</label>
+            <textarea class="form-control form-control-lg" id="description" rows="4" readonly placeholder="Descrizione non disponibile">{{ product.description }}</textarea>
+          </div>
         </div>
       </div>
 
@@ -232,8 +240,14 @@
             <span class="text-muted small">Prezzo</span>
             <div class="fw-semibold fs-5 text-success">€ {{ '%.2f'|format(product.price) }}</div>
           </div>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="text-muted small">Marchio</span>
+            <span class="badge text-bg-light border">{{ product.marchio or '—' }}</span>
+          </div>
           <div class="text-muted small">Descrizione marketing</div>
           <p class="mb-0 fw-medium">{{ product.descrizione_marketing }}</p>
+          <div class="text-muted small mt-3">Descrizione PIM</div>
+          <p class="mb-0">{{ product.description or '—' }}</p>
         </div>
         <div>
           <p class="text-muted text-uppercase small fw-semibold mb-2">Codici categoria disponibili</p>

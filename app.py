@@ -137,8 +137,11 @@ class Product:
     code: str
     categories: List[Dict[str, str]]
     codice_ean: str
+    marchio: str
+    nome_marca: str
     denominazione_vendita: str
     descrizione_marketing: str
+    description: str
     price: float
     ai_category: Optional[Dict[str, str]] = None
     status: str = "review"
@@ -251,8 +254,11 @@ def fetch_product_from_api(code: str) -> Optional[Dict[str, str]]:
         "code": root.findtext("code", default=code),
         "categories": parse_categories(root),
         "codice_ean": root.findtext("codiceEAN", default=""),
+        "marchio": root.findtext("marchio", default=""),
+        "nome_marca": root.findtext("nomeMarca", default=""),
         "denominazione_vendita": root.findtext("denominazioneDiVendita", default=""),
         "descrizione_marketing": root.findtext("descrizioneMarketing", default=""),
+        "description": root.findtext("description", default=""),
         "price": price_float,
     }
 
@@ -282,8 +288,11 @@ def build_products(codes: List[str]) -> Tuple[List[Product], List[str]]:
                     code=code,
                     categories=[],
                     codice_ean="",
+                    marchio="",
+                    nome_marca="",
                     denominazione_vendita="",
                     descrizione_marketing="",
+                    description="",
                     price=0.0,
                     status="error",
                 )
@@ -295,8 +304,11 @@ def build_products(codes: List[str]) -> Tuple[List[Product], List[str]]:
                 code=product_data["code"],
                 categories=product_data["categories"],
                 codice_ean=product_data["codice_ean"],
+                marchio=product_data["marchio"],
+                nome_marca=product_data["nome_marca"],
                 denominazione_vendita=product_data["denominazione_vendita"],
                 descrizione_marketing=product_data["descrizione_marketing"],
+                description=product_data["description"],
                 price=product_data["price"],
                 ai_category=product_data.get("ai_category"),
                 status="review",
