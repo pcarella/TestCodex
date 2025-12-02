@@ -7,7 +7,7 @@
       <div>
         <div class="section-title mb-1"><span class="text-warning">●</span> Lista codici prodotto</div>
         <h1 class="h4 mt-1 mb-2">Inserisci i codici prodotto</h1>
-        <p class="mb-0 text-muted">Inserisci i codici: recupereremo i dati dal PIM, arricchiremo la categoria e costruiremo una short description pronta per il catalogo.</p>
+          <p class="mb-0 text-muted">Inserisci i codici: recupereremo i dati dal PIM, arricchiremo la categoria e costruiremo una short description pronta per il catalogo. Massimo 100 codici per richiesta.</p>
       </div>
     </div>
   </div>
@@ -38,19 +38,21 @@
               rows="6"
               placeholder="Es.\n1234567890\n9876543210\n0001122333"
             >{{ request.form.get('codes', '') }}</textarea>
-            <div class="form-text">Minimo 1 codice. Puoi incollare anche da Excel.</div>
+            <div class="form-text" id="codes-helper" aria-live="polite">Minimo 1 codice, massimo 100. Puoi incollare anche da Excel. <span class="fw-semibold" id="code-count">0 codici</span>.</div>
+            <div class="invalid-feedback d-block text-danger small" id="codes-error" aria-live="assertive" role="alert" style="display: none;">Inserisci almeno un codice o carica un CSV prima di procedere.</div>
           </div>
 
           <div class="my-3 text-center text-muted">— oppure —</div>
 
-          <div class="mb-4 d-flex align-items-center gap-3 flex-wrap">
+          <div class="mb-4 d-flex align-items-center gap-3 flex-wrap align-items-start">
             <div class="d-flex align-items-center gap-2 flex-grow-1">
               <div class="bg-warning-subtle text-warning-emphasis rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
                 <span class="fw-bold">CSV</span>
               </div>
               <div>
                 <div class="fw-semibold">Carica file CSV</div>
-                <div class="small text-muted">Il file deve contenere una colonna <code>code_prodotto</code>.</div>
+                <div class="small text-muted">Il file deve contenere una colonna <code>code_prodotto</code>. <a download="template_codici.csv" href="data:text/csv,code_prodotto%0AP001%0AP002%0AP003">Scarica template CSV</a>.</div>
+                <div class="small text-muted">Formato accettato: UTF-8, max 1MB.</div>
               </div>
             </div>
             <div>
@@ -78,11 +80,74 @@
 
           <div class="d-flex justify-content-end gap-3 mt-2">
             <a class="btn btn-outline-secondary" href="{{ url_for('logout') }}">Annulla</a>
-            <button type="submit" class="btn btn-primary px-4">Recupera dati dal PIM</button>
+            <button type="submit" class="btn btn-primary px-4" id="submit-codes">
+              <span class="spinner-border spinner-border-sm align-text-bottom me-2 d-none" role="status" aria-hidden="true"></span>
+              <span class="submit-label">Recupera dati dal PIM</span>
+            </button>
           </div>
         </form>
       </div>
     </div>
   </div>
 </div>
+<script>
+  (function () {
+    const textarea = document.getElementById("codes");
+    const fileInput = document.getElementById("csv_file");
+    const helper = document.getElementById("code-count");
+    const errorBox = document.getElementById("codes-error");
+    const submitButton = document.getElementById("submit-codes");
+    const spinner = submitButton?.querySelector(".spinner-border");
+    const label = submitButton?.querySelector(".submit-label");
+    const form = submitButton?.closest("form");
+
+    const updateCount = () => {
+      const raw = textarea.value.trim();
+      const codes = raw
+        .split(/[\n,]+/)
+        .map((c) => c.trim())
+        .filter(Boolean);
+      helper.textContent = `${codes.length} codici`;
+      if (codes.length > 100) {
+        showError("Massimo 100 codici per richiesta.");
+      }
+    };
+
+    const showError = (message) => {
+      errorBox.textContent = message;
+      errorBox.style.display = "block";
+      textarea.setAttribute("aria-invalid", "true");
+    };
+
+    const clearError = () => {
+      errorBox.style.display = "none";
+      textarea.removeAttribute("aria-invalid");
+    };
+
+    textarea?.addEventListener("input", () => {
+      clearError();
+      updateCount();
+    });
+
+    fileInput?.addEventListener("change", () => {
+      clearError();
+    });
+
+    form?.addEventListener("submit", (event) => {
+      const hasText = textarea.value.trim().length > 0;
+      const hasFile = fileInput?.files?.length;
+      if (!hasText && !hasFile) {
+        event.preventDefault();
+        showError("Inserisci almeno un codice o carica il template CSV.");
+        return;
+      }
+
+      submitButton.setAttribute("disabled", "disabled");
+      spinner?.classList.remove("d-none");
+      label.textContent = "Elaborazione in corso...";
+    });
+
+    updateCount();
+  })();
+</script>
 {% endblock %}

@@ -29,6 +29,7 @@
         --brand-secondary: #f6b000;
         --brand-cream: #fff7ea;
         --brand-dark: #2d2a32;
+        --brand-gradient: linear-gradient(120deg, var(--brand-primary), #b61117);
       }
 
       body {
@@ -36,6 +37,7 @@
         background: #f5f7fb;
         color: var(--brand-dark);
         min-height: 100vh;
+        line-height: 1.6;
       }
 
       .app-header {
@@ -66,10 +68,10 @@
         width: 44px;
         height: 44px;
         border-radius: 50%;
-        background: linear-gradient(135deg, #f08c3b, #e86f1e);
+        background: var(--brand-gradient);
         display: grid;
         place-items: center;
-        box-shadow: 0 10px 22px rgba(232, 111, 30, 0.35);
+        box-shadow: 0 10px 22px rgba(214, 24, 31, 0.25);
       }
 
       .brand-symbol__dot {
@@ -215,7 +217,7 @@
       }
 
       .btn-primary {
-        background: linear-gradient(120deg, var(--brand-primary), #b61117);
+        background: var(--brand-gradient);
         border: none;
         box-shadow: 0 12px 22px rgba(214, 24, 31, 0.4);
         font-weight: 600;
@@ -262,6 +264,23 @@
       a:hover {
         color: #a50f16;
       }
+
+      .form-control:focus,
+      .form-select:focus,
+      .btn:focus,
+      .form-check-input:focus {
+        outline: 2px solid rgba(214, 24, 31, 0.4);
+        outline-offset: 2px;
+        box-shadow: 0 0 0 3px rgba(214, 24, 31, 0.25);
+      }
+
+      .text-muted {
+        color: #4b5563 !important;
+      }
+
+      .shadow-soft {
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+      }
     </style>
   </head>
   <body>
@@ -282,7 +301,7 @@
             </div>
           </div>
 
-          <div class="app-steps">
+          <div class="app-steps" aria-label="Progressione del flusso">
             {% set steps = [
               {'label': 'Login', 'endpoint': 'login'},
               {'label': 'Codice prodotto', 'endpoint': 'codes'},
@@ -291,9 +310,16 @@
             ] %}
             {% for step in steps %}
               {% set status = 'completed' if loop.index0 < step_index else 'active' if loop.index0 == step_index else 'upcoming' %}
-              <div class="app-step {{ status }}">
-                <span class="app-step__label">{{ step.label }}</span>
-              </div>
+              {% set is_clickable = loop.index0 < step_index %}
+              {% if is_clickable %}
+                <a class="app-step {{ status }} text-decoration-none" href="{{ url_for(step.endpoint) }}" aria-label="Vai a {{ step.label }}">
+                  <span class="app-step__label">{{ step.label }}</span>
+                </a>
+              {% else %}
+                <div class="app-step {{ status }}" aria-current="step">
+                  <span class="app-step__label">{{ step.label }}</span>
+                </div>
+              {% endif %}
             {% endfor %}
           </div>
 
@@ -315,7 +341,7 @@
     <main class="container">
       {% with messages = get_flashed_messages() %}
       {% if messages %}
-      <div class="alert alert-warning" role="alert">
+      <div class="alert alert-warning" role="alert" aria-live="assertive" id="flash-messages">
         {% for message in messages %}
         <div>{{ message }}</div>
         {% endfor %}
