@@ -47,18 +47,14 @@ def hash_password(password: str) -> str:
 
 def init_db() -> None:
     Base.metadata.create_all(engine)
-
-    default_users: Dict[str, str] = {
-        "admin": "password",
-        "demo": "demo",
-    }
+    # Ensure legacy demo credentials are removed so only registered users can access
     with SessionLocal.begin() as db_session:
-        for username, password in default_users.items():
+        for username in ("demo", "admin"):
             existing_user = db_session.execute(
                 select(User).where(User.username == username)
             ).scalar_one_or_none()
-            if not existing_user:
-                db_session.add(User(username=username, password_hash=hash_password(password)))
+            if existing_user:
+                db_session.delete(existing_user)
 
 
 init_db()
