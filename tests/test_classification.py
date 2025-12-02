@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import types
 
@@ -125,30 +126,76 @@ sys.modules.setdefault("sqlalchemy.orm", sqlalchemy_orm_stub)
 sys.modules.setdefault("requests", requests_stub)
 sys.modules.setdefault("openai", openai_stub)
 
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 import app
 
 
-class DummyResponses:
+class DummyMessages:
     def __init__(self, capture):
         self.capture = capture
+        self.data = [
+            types.SimpleNamespace(
+                content=[
+                    types.SimpleNamespace(
+                        type="text",
+                        text=types.SimpleNamespace(value="{}"),
+                    )
+                ]
+            )
+        ]
 
     def create(self, **kwargs):
-        self.capture.update(kwargs)
-        return types.SimpleNamespace(output_text="{}")
+        self.capture["message_create"] = kwargs
+
+    def list(self, **kwargs):
+        self.capture["messages_list"] = kwargs
+        return types.SimpleNamespace(data=self.data)
+
+
+class DummyRuns:
+    def __init__(self, capture):
+        self.capture = capture
+        self.run = types.SimpleNamespace(id="run_1", status="completed")
+
+    def create(self, **kwargs):
+        self.capture["run_create"] = kwargs
+        return self.run
+
+    def retrieve(self, **kwargs):
+        self.capture.setdefault("run_retrieve", []).append(kwargs)
+        return self.run
+
+
+class DummyThreads:
+    def __init__(self, capture):
+        self.capture = capture
+        self.messages = DummyMessages(capture)
+        self.runs = DummyRuns(capture)
+
+    def create(self):
+        self.capture["thread_create"] = True
+        return types.SimpleNamespace(id="thread_1")
+
+
+class DummyBeta:
+    def __init__(self, capture):
+        self.threads = DummyThreads(capture)
 
 
 def test_classify_with_agent_passes_agent_and_prompt(monkeypatch):
     captured: dict = {}
-    fake_client = types.SimpleNamespace(responses=DummyResponses(captured))
+    fake_client = types.SimpleNamespace(beta=DummyBeta(captured))
 
     monkeypatch.setattr(app, "openai_client", fake_client)
     monkeypatch.setattr(app, "OPENAI_AGENT_ID", "agent_123")
 
     result = app.classify_with_agent("prompt di prova")
 
-    assert captured["agent_id"] == "agent_123"
-    user_message = captured["input"][0]
-    assert user_message["content"][0]["text"] == "prompt di prova"
+    assert captured["run_create"]["assistant_id"] == "agent_123"
+    assert captured["message_create"]["content"] == "prompt di prova"
+    assert captured["message_create"]["thread_id"] == "thread_1"
+    assert captured["messages_list"]["thread_id"] == "thread_1"
     assert result.output_text == "{}"
 
 
