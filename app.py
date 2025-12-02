@@ -121,7 +121,7 @@ def fetch_from_pim(codes: List[str]) -> List[Dict[str, str]]:
 def build_products(
     codes: List[str],
     *,
-    generate_short_description: bool = True,
+    generate_short_description_enabled: bool = True,
     recognize_category: bool = True,
 ) -> List[Product]:
     raw_products = fetch_from_pim(codes)
@@ -134,7 +134,7 @@ def build_products(
         )
         short_description = (
             generate_short_description(product)
-            if generate_short_description
+            if generate_short_description_enabled
             else ""
         )
         products.append(
@@ -229,7 +229,7 @@ def codes():
         else:
             products = build_products(
                 codes,
-                generate_short_description=generate_short_description,
+                generate_short_description_enabled=generate_short_description,
                 recognize_category=recognize_category,
             )
             session["products"] = [product.__dict__ for product in products]
