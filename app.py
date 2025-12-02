@@ -173,7 +173,6 @@ def classify_product_category(product_data: Dict[str, str]) -> Optional[str]:
         "denominazione_vendita": product_data.get("denominazione_vendita", ""),
         "descrizione_marketing": product_data.get("descrizione_marketing", ""),
         "price": product_data.get("price", 0.0),
-        "categories": product_data.get("categories", []),
     }
     print(f"[OpenAI] Richiesta classificazione: {json.dumps(payload, ensure_ascii=False)}")
 

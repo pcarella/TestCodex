@@ -241,6 +241,12 @@
                     <li><span class="fw-semibold">{{ category.code }}</span> — {{ category.name }}</li>
                   {% endfor %}
                 </ul>
+                {% if product.ai_category %}
+                <div class="small mt-1">
+                  <span class="badge text-bg-warning text-dark">Suggerita AI</span>
+                  <span class="fw-semibold">{{ product.ai_category }}</span>
+                </div>
+                {% endif %}
               {% else %}
               <span class="text-muted small">Nessuna categoria disponibile</span>
               {% endif %}

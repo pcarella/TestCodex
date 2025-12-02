@@ -142,7 +142,12 @@
             </select>
           </div>
           <div class="col-md-6">
-            <label class="form-label" for="categoria_ai">Categoria suggerita da AI</label>
+            <label class="form-label d-flex align-items-center gap-2" for="categoria_ai">
+              Categoria suggerita da AI
+              {% if product.ai_category %}
+              <span class="badge text-bg-warning text-dark">{{ product.ai_category }}</span>
+              {% endif %}
+            </label>
             <select id="categoria_ai" class="form-select form-select-lg">
               {% if product.categories %}
               {% for category in product.categories %}
