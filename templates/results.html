@@ -5,7 +5,13 @@
     <div class="section-title mb-2"><span class="text-warning">●</span> Prodotti richiesti</div>
     <h1 class="h4">Anteprima dati dal PIM</h1>
   </div>
-  <a class="btn btn-outline-secondary" href="{{ url_for('codes') }}">Nuova lista</a>
+  <div class="text-end">
+    <div class="small text-muted mb-2">
+      <div>Short description: {{ 'attiva' if options.generate_short_description else 'disattivata' }}</div>
+      <div>Categoria: {{ 'riconosciuta' if options.recognize_category else 'non calcolata' }}</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('codes') }}">Nuova lista</a>
+  </div>
 </div>
 
 <div class="row row-cols-1 row-cols-md-2 g-3">
@@ -18,10 +24,14 @@
             <p class="text-muted small mb-1">Codice {{ product.code }}</p>
             <h2 class="h5 mb-0">{{ product.name }}</h2>
           </div>
+          {% if product.category %}
           <span class="badge text-bg-info">{{ product.category }}</span>
+          {% else %}
+          <span class="badge text-bg-secondary">Categoria non calcolata</span>
+          {% endif %}
         </div>
         <p class="text-muted mb-1">Brand: <strong>{{ product.brand }}</strong></p>
-        <p class="mt-2 flex-grow-1">{{ product.short_description }}</p>
+        <p class="mt-2 flex-grow-1">{{ product.short_description or 'Short description non generata per questo prodotto.' }}</p>
         <a class="btn btn-primary mt-2 align-self-start" href="{{ url_for('product_detail', code=product.code) }}">Apri scheda</a>
       </div>
     </div>
