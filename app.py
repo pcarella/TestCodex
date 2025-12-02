@@ -140,6 +140,7 @@ class Product:
     denominazione_vendita: str
     descrizione_marketing: str
     price: float
+    ai_category: Optional[Dict[str, str]] = None
     status: str = "review"
 
 
@@ -162,7 +163,7 @@ def parse_categories(product_xml: ElementTree.Element) -> List[Dict[str, str]]:
     return categories
 
 
-def classify_product_category(product_data: Dict[str, str]) -> Optional[str]:
+def classify_product_category(product_data: Dict[str, str]) -> Optional[Dict[str, str]]:
     if not openai_client:
         print("[OpenAI] OPENAI_API_KEY non configurata: salto la classificazione AI.")
         return None
@@ -184,7 +185,15 @@ def classify_product_category(product_data: Dict[str, str]) -> Optional[str]:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "input_text", "text": json.dumps(payload, ensure_ascii=False)}
+                        {
+                            "type": "input_text",
+                            "text": (
+                                "Restituisci SEMPRE e SOLO un JSON con le chiavi "
+                                "category_2_id, category_2_name, category_1_name, reason "
+                                "basandoti sui dati prodotto seguenti: "
+                                f"{json.dumps(payload, ensure_ascii=False)}"
+                            ),
+                        }
                     ],
                 }
             ],
@@ -197,14 +206,23 @@ def classify_product_category(product_data: Dict[str, str]) -> Optional[str]:
 
     try:
         if hasattr(response, "output_text") and response.output_text:
-            return response.output_text.strip()
+            raw_text = response.output_text.strip()
+        else:
+            output_blocks = getattr(response, "output", None) or []
+            first_block = output_blocks[0]
+            content_list = getattr(first_block, "content", None) or []
+            raw_text = (getattr(content_list[0], "text", "") or "").strip()
 
-        output_blocks = getattr(response, "output", None) or []
-        first_block = output_blocks[0]
-        content_list = getattr(first_block, "content", None) or []
-        text_value = getattr(content_list[0], "text", None)
-        return (text_value or "").strip()
-    except (AttributeError, IndexError, KeyError, TypeError):
+        parsed = json.loads(raw_text)
+        required_keys = {"category_2_id", "category_2_name", "category_1_name", "reason"}
+        if not required_keys.issubset(parsed):
+            missing = required_keys - set(parsed)
+            print(f"[OpenAI] Risposta JSON mancante di campi obbligatori: {missing}")
+            return None
+
+        return {key: str(parsed.get(key, "")).strip() for key in required_keys}
+    except (AttributeError, IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        print(f"[OpenAI] Impossibile leggere la risposta AI come JSON: {exc}")
         return None
 
 
@@ -241,7 +259,12 @@ def fetch_product_from_api(code: str) -> Optional[Dict[str, str]]:
     ai_category = classify_product_category(product_data)
     if ai_category:
         product_data["ai_category"] = ai_category
-        product_data.setdefault("categories", []).append({"code": "ai", "name": ai_category})
+        product_data.setdefault("categories", []).append(
+            {
+                "code": ai_category.get("category_2_id", "ai"),
+                "name": ai_category.get("category_2_name", "Suggerita AI"),
+            }
+        )
 
     return product_data
 
@@ -275,6 +298,7 @@ def build_products(codes: List[str]) -> Tuple[List[Product], List[str]]:
                 denominazione_vendita=product_data["denominazione_vendita"],
                 descrizione_marketing=product_data["descrizione_marketing"],
                 price=product_data["price"],
+                ai_category=product_data.get("ai_category"),
                 status="review",
             )
         )

@@ -242,9 +242,11 @@
                   {% endfor %}
                 </ul>
                 {% if product.ai_category %}
+                {% set ai = product.ai_category %}
                 <div class="small mt-1">
                   <span class="badge text-bg-warning text-dark">Suggerita AI</span>
-                  <span class="fw-semibold">{{ product.ai_category }}</span>
+                  <div class="fw-semibold">{{ ai.category_2_name or ai.category_1_name }}</div>
+                  <div class="text-muted">ID liv. 2: {{ ai.category_2_id }} · Livello 1: {{ ai.category_1_name }}</div>
                 </div>
                 {% endif %}
               {% else %}
