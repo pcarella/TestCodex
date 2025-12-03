@@ -31,9 +31,14 @@ app = Flask(__name__)
 app.secret_key = "dev-secret-key"
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
-API_TOKEN = os.getenv(
-    "CONAD_API_TOKEN", "vm8ZQy9FyAir3r4ssRv787mDnJc"
+DEFAULT_TOKEN_URL = (
+    "https://api.cfp5zmx7oc-conadscrl1-s2-public.model-t.cc.commerce."
+    "ondemand.com/authorizationserver/oauth/token"
 )
+API_TOKEN_URL = os.getenv("CONAD_TOKEN_URL", DEFAULT_TOKEN_URL)
+API_CLIENT_ID = os.getenv("CONAD_CLIENT_ID", "aem_client")
+API_CLIENT_SECRET = os.getenv("CONAD_CLIENT_SECRET", "secret")
+API_GRANT_TYPE = os.getenv("CONAD_GRANT_TYPE", "client_credentials")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_AGENT_ID = os.getenv("OPENAI_AGENT_ID", "asst_o1LCzpNKALkmUwTGao1x0Mjp")
@@ -280,13 +285,86 @@ def _extract_response_text(response) -> str:
         return ""
 
 
+def _token_is_expired(expires_at: Optional[str]) -> bool:
+    if not expires_at:
+        return True
+
+    try:
+        expiry_dt = dt.datetime.fromisoformat(expires_at)
+    except (TypeError, ValueError):
+        return True
+
+    return dt.datetime.utcnow() >= expiry_dt
+
+
+def _store_api_token(token: str, expires_in: int) -> str:
+    safe_expires_in = max(expires_in - 30, 30) if expires_in else 0
+    expiry = dt.datetime.utcnow() + dt.timedelta(seconds=safe_expires_in)
+    session["api_token"] = token
+    session["api_token_expires_at"] = expiry.isoformat()
+    return token
+
+
+def request_api_token() -> Optional[str]:
+    try:
+        response = requests.post(
+            API_TOKEN_URL,
+            data={"grant_type": API_GRANT_TYPE},
+            auth=(API_CLIENT_ID, API_CLIENT_SECRET),
+            timeout=10,
+        )
+    except Exception as exc:
+        print(f"[API] Errore durante la richiesta del token: {exc}")
+        return None
+
+    if response.status_code != 200:
+        print(
+            f"[API] Token non ottenuto: status {response.status_code}, body {response.text}"
+        )
+        return None
+
+    try:
+        payload = response.json()
+        token = payload.get("access_token", "")
+        expires_in = int(payload.get("expires_in", 0))
+    except (ValueError, json.JSONDecodeError, TypeError) as exc:
+        print(f"[API] Risposta token non valida: {exc}")
+        return None
+
+    if not token:
+        print("[API] Token mancante nella risposta OAuth2.")
+        return None
+
+    return _store_api_token(token, expires_in)
+
+
+def get_api_token(force_refresh: bool = False) -> Optional[str]:
+    cached_token = session.get("api_token")
+    expires_at = session.get("api_token_expires_at")
+
+    if not force_refresh and cached_token and not _token_is_expired(expires_at):
+        return cached_token
+
+    return request_api_token()
+
+
 def fetch_product_from_api(code: str) -> Optional[Dict[str, str]]:
     url = API_URL_TEMPLATE.format(code=code)
-    headers = {
-        "accept": "application/xml",
-        "Authorization": f"Bearer {API_TOKEN}",
-    }
+    token = get_api_token()
+    if not token:
+        return None
+
+    headers = {"accept": "application/xml", "Authorization": f"Bearer {token}"}
     response = requests.get(url, headers=headers, timeout=10)
+
+    if response.status_code == 401:
+        refreshed_token = get_api_token(force_refresh=True)
+        if not refreshed_token:
+            return None
+
+        headers["Authorization"] = f"Bearer {refreshed_token}"
+        response = requests.get(url, headers=headers, timeout=10)
+
     if response.status_code != 200:
         return None
 
