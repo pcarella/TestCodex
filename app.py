@@ -55,6 +55,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 Base = declarative_base()
 def _create_openai_client() -> Optional[OpenAI]:
     if not OPENAI_API_KEY:
+        print("[OpenAI] OPENAI_API_KEY non configurata: salto la classificazione AI.")
         return None
 
     try:
