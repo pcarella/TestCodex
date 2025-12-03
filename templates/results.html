@@ -216,10 +216,10 @@
               </div>
             </th>
             <th class="text-uppercase small text-muted">Codice</th>
-            <th class="text-uppercase small text-muted">Categorie</th>
+            <th class="text-uppercase small text-muted">Categoria PIM</th>
+            <th class="text-uppercase small text-muted">Categoria AI</th>
             <th class="text-uppercase small text-muted">Codice EAN</th>
             <th class="text-uppercase small text-muted">Denominazione di vendita</th>
-            <th class="text-uppercase small text-muted">Descrizione marketing</th>
             <th class="text-uppercase small text-muted">Prezzo</th>
             <th class="text-uppercase small text-muted">Stato</th>
             <th class="text-uppercase small text-muted text-end">Azioni</th>
@@ -235,27 +235,31 @@
             </td>
             <td class="fw-semibold">{{ product.code }}</td>
             <td>
-              {% if product.categories %}
+              {% set pim_categories = product.categories[1:] if product.categories|length > 1 else [] %}
+              {% if pim_categories %}
                 <ul class="mb-0 small text-muted">
-                  {% for category in product.categories %}
-                    <li><span class="fw-semibold">{{ category.code }}</span> — {{ category.name }}</li>
+                  {% for category in pim_categories %}
+                    <li>{{ category.name }}</li>
                   {% endfor %}
                 </ul>
-                {% if product.ai_category %}
-                {% set ai = product.ai_category %}
-                <div class="small mt-1">
-                  <span class="badge text-bg-warning text-dark">Suggerita AI</span>
-                  <div class="fw-semibold">{{ ai.category_2_name or ai.category_1_name }}</div>
-                  <div class="text-muted">ID liv. 2: {{ ai.category_2_id }} · Livello 1: {{ ai.category_1_name }}</div>
-                </div>
-                {% endif %}
               {% else %}
               <span class="text-muted small">Nessuna categoria disponibile</span>
               {% endif %}
             </td>
+            <td>
+              {% if product.ai_category %}
+              {% set ai = product.ai_category %}
+              {% set ai_name = ai.category_2_name or ai.category_1_name %}
+              <div class="small">
+                <span class="badge text-bg-warning text-dark">Suggerita AI</span>
+                <div class="fw-semibold">{{ ai_name or '—' }}</div>
+              </div>
+              {% else %}
+              <span class="text-muted small">Nessuna categoria AI</span>
+              {% endif %}
+            </td>
             <td class="text-muted small">{{ product.codice_ean or '—' }}</td>
             <td class="fw-semibold">{{ product.denominazione_vendita or '—' }}</td>
-            <td class="small text-muted" style="max-width: 280px;">{{ product.descrizione_marketing or '—' }}</td>
             <td class="fw-semibold">€ {{ '%.2f'|format(product.price) }}</td>
             <td>
               {% set status_key = product.status %}
