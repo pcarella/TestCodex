@@ -237,7 +237,7 @@
             <td>
               {% set pim_categories = product.categories[1:] if product.categories|length > 1 else [] %}
               {% if pim_categories %}
-                <ul class="mb-0 small text-muted">
+                <ul class="mb-0 small text-muted list-unstyled">
                   {% for category in pim_categories %}
                     <li>{{ category.name }}</li>
                   {% endfor %}
@@ -250,10 +250,7 @@
               {% if product.ai_category %}
               {% set ai = product.ai_category %}
               {% set ai_name = ai.category_2_name or ai.category_1_name %}
-              <div class="small">
-                <span class="badge text-bg-warning text-dark">Suggerita AI</span>
-                <div class="fw-semibold">{{ ai_name or '—' }}</div>
-              </div>
+              <div class="small fw-semibold">{{ ai_name or '—' }}</div>
               {% else %}
               <span class="text-muted small">Nessuna categoria AI</span>
               {% endif %}
