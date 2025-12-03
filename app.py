@@ -53,7 +53,21 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 Base = declarative_base()
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+def _create_openai_client() -> Optional[OpenAI]:
+    if not OPENAI_API_KEY:
+        return None
+
+    try:
+        return OpenAI(api_key=OPENAI_API_KEY)
+    except TypeError as exc:
+        # Alcune versioni del client OpenAI possono rifiutare parametri imprevisti
+        # (ad esempio "proxies") quando vengono inizializzate. In tal caso
+        # continuiamo senza il supporto AI per evitare il crash dell'app.
+        print(f"[OpenAI] Impossibile inizializzare il client: {exc}")
+        return None
+
+
+openai_client = _create_openai_client()
 
 
 class User(Base):
