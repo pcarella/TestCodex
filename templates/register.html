@@ -1,69 +1,60 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-  body {
-    background: #f5f6f7;
-  }
-
   .login-card {
     background: #ffffff;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--border);
     border-radius: 14px;
-    box-shadow: 0 22px 40px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.06);
     padding: 2.25rem 2rem;
   }
 
   .login-title {
     font-size: 1.75rem;
     font-weight: 700;
-    color: #1f2937;
+    color: var(--brand-dark);
   }
 
   .login-subtitle {
-    color: #6b7280;
+    color: var(--brand-text);
   }
 
   .login-form label {
     font-weight: 600;
-    color: #374151;
+    color: var(--brand-dark);
   }
 
   .login-form .form-control {
     border-radius: 10px;
-    border-color: #d1d5db;
+    border-color: var(--border);
     padding: 0.9rem 0.95rem;
   }
 
-  .login-form .form-control:focus {
-    box-shadow: 0 0 0 0.2rem rgba(235, 133, 50, 0.2);
-    border-color: #f08c3b;
-  }
-
   .login-actions {
-    color: #4b5563;
+    color: var(--brand-text);
   }
 
   .login-actions a {
-    color: #f08c3b;
+    color: var(--brand-dark);
     text-decoration: none;
     font-weight: 600;
   }
 
   .login-actions a:hover {
-    color: #dd6b20;
+    color: #111827;
   }
 
   .btn-login {
-    background: var(--brand-gradient);
-    border: none;
-    border-radius: 999px;
+    background: var(--brand-accent);
+    border: 1px solid #d64a05;
+    border-radius: 12px;
     padding: 0.85rem 2rem;
     font-weight: 700;
-    box-shadow: 0 14px 30px rgba(214, 24, 31, 0.35);
+    box-shadow: none;
   }
 
   .btn-login:hover {
-    background: linear-gradient(120deg, #b61117, #8e0d14);
+    background: #d64a05;
   }
 
   .login-footer {
