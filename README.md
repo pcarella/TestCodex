@@ -30,7 +30,11 @@ Applicazione demo costruita con Flask che arricchisce prodotti partendo da una l
 Variabili d'ambiente principali:
 
 - `DATABASE_URL`: stringa di connessione SQLAlchemy (default `sqlite:///app.db`).
-- `CONAD_API_TOKEN`: token Bearer per l'API esterna dei prodotti.
+- `CONAD_TOKEN_URL`: endpoint OAuth2 per ottenere l'access token (default
+  `https://api.cfp5zmx7oc-conadscrl1-s2-public.model-t.cc.commerce.ondemand.com/authorizationserver/oauth/token`).
+- `CONAD_CLIENT_ID`: client_id OAuth2 per la chiamata `client_credentials` (default `aem_client`).
+- `CONAD_CLIENT_SECRET`: client_secret OAuth2 per la chiamata `client_credentials` (default `secret`).
+- `CONAD_GRANT_TYPE`: grant_type OAuth2 (default `client_credentials`).
 - `OPENAI_API_KEY`: chiave API OpenAI (se assente la classificazione AI viene ignorata senza errore).
 - `OPENAI_MODEL`: modello OpenAI usato (default `gpt-4o-mini`).
 - `OPENAI_AGENT_ID`: ID dell'agente OpenAI che riceve il prompt di classificazione.
@@ -57,7 +61,7 @@ flask --app app run --debug
 7. Logout.
 
 ## Logica di integrazione PIM
-- Endpoint API configurato in `API_URL_TEMPLATE` con header `Authorization: Bearer <CONAD_API_TOKEN>`.
+- Endpoint API configurato in `API_URL_TEMPLATE` con header `Authorization: Bearer <token OAuth2>` ottenuto con grant `client_credentials` e conservato in sessione utente (con refresh automatico su 401/expiration).
 - La risposta XML viene parsata per estrarre codice, EAN, brand, descrizioni, prezzo e categorie.
 - Errori HTTP o di parsing portano a un elemento con `status="error"` e vengono elencati nei "codici mancanti".
 
