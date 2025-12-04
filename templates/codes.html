@@ -26,6 +26,7 @@
         </div>
 
         <form method="post" class="mt-2" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
           <div class="mb-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
               <label class="form-label mb-0" for="codes">Codici prodotto</label>

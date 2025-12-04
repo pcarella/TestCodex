@@ -73,6 +73,7 @@
         </p>
       </div>
       <form method="post" class="login-form" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <div class="mb-3">
           <label class="form-label" for="username">Email o username</label>
           <input
@@ -114,7 +115,7 @@
         </p>
       </form>
       <p class="login-footer text-center mt-3">
-        Le password vengono salvate in modo sicuro (sha256). Puoi cambiare DB configurando <code>DATABASE_URL</code> per MySQL.
+        Le password vengono salvate con hashing robusto PBKDF2. Puoi cambiare DB configurando <code>DATABASE_URL</code> per MySQL.
       </p>
     </div>
   </div>

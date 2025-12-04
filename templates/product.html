@@ -88,6 +88,7 @@
       Alcuni campi sono stati suggeriti dall'AI. Puoi modificarli prima di salvare.
     </div>
     <form method="post" class="row g-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <div class="form-section col-12">
         <div class="d-flex align-items-center gap-2 mb-3">
           <div class="rounded-circle bg-warning-subtle text-warning-emphasis d-inline-flex align-items-center justify-content-center fw-bold" style="width: 36px; height: 36px;">1</div>
