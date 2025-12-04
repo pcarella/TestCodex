@@ -11,8 +11,13 @@ import secrets
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Dict, List, Optional, Tuple
-from xml.etree import ElementTree
 
+import requests
+try:
+    from defusedxml import ElementTree
+except ImportError:  # pragma: no cover - fallback for offline environments
+    from xml.etree import ElementTree
+    print("[Security] defusedxml non disponibile: utilizzo xml.etree fallback.")
 from flask import (
     Flask,
     flash,
@@ -22,13 +27,72 @@ from flask import (
     session,
     url_for,
 )
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+except ImportError:  # pragma: no cover - fallback for offline environments
+    def get_remote_address() -> str:
+        return "127.0.0.1"
+
+    class Limiter:  # type: ignore
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def limit(self, *args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        def __call__(self, *args, **kwargs):
+            return self
+
+try:
+    from flask_wtf import CSRFProtect
+except ImportError:  # pragma: no cover - fallback for offline environments
+    class CSRFProtect:  # type: ignore
+        def __init__(self, app=None):
+            self.app = app
+
+        def __call__(self, app):
+            self.app = app
+            return app
 from openai import OpenAI
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, create_engine, select
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
-import requests
+try:
+    from werkzeug.security import check_password_hash, generate_password_hash
+except ImportError:  # pragma: no cover - fallback for offline environments
+    def generate_password_hash(password: str, method: str = "pbkdf2:sha256", salt_length: int = 16) -> str:
+        return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+    def check_password_hash(pwhash: str, password: str) -> bool:
+        return pwhash == generate_password_hash(password)
 
 app = Flask(__name__)
-app.secret_key = "dev-secret-key"
+if not hasattr(app, "config"):
+    app.config = {}
+
+
+class Config:
+    SECRET_KEY = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SECURE = os.getenv("FLASK_SECURE_COOKIES", "1") == "1"
+    SESSION_COOKIE_SAMESITE = "Lax"
+    PERMANENT_SESSION_LIFETIME = dt.timedelta(minutes=30)
+    WTF_CSRF_TIME_LIMIT = 60 * 60
+    PREFERRED_URL_SCHEME = "https" if SESSION_COOKIE_SECURE else "http"
+
+
+if hasattr(getattr(app, "config", None), "from_object"):
+    app.config.from_object(Config)
+else:  # pragma: no cover - fallback for tests without real Flask
+    for key, value in Config.__dict__.items():
+        if key.isupper():
+            app.config[key] = value
+csrf = CSRFProtect(app)
+limiter = Limiter(get_remote_address, app=app, default_limits=["100 per hour"])
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
 DEFAULT_TOKEN_URL = (
@@ -95,7 +159,11 @@ class PasswordResetToken(Base):
 
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    return generate_password_hash(password, method="pbkdf2:sha256", salt_length=16)
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    return check_password_hash(password_hash, password)
 
 
 def send_reset_email(recipient: str, reset_url: str) -> None:
@@ -173,6 +241,17 @@ STATUS_CHOICES = {
     "review": {"label": "Richiede revisione", "badge": "warning"},
     "error": {"label": "Errore", "badge": "danger"},
 }
+
+CODE_PATTERN = re.compile(r"^[A-Za-z0-9._-]{3,64}$")
+PASSWORD_POLICY = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{12,}$")
+
+
+def username_is_valid(username: str) -> bool:
+    return bool(username) and bool(re.fullmatch(r"[A-Za-z0-9_.-]{3,64}", username))
+
+
+def password_is_valid(password: str) -> bool:
+    return bool(PASSWORD_POLICY.match(password))
 
 
 def parse_categories(product_xml: ElementTree.Element) -> List[Dict[str, str]]:
@@ -300,23 +379,21 @@ def _extract_response_text(response) -> str:
         return ""
 
 
-def _token_is_expired(expires_at: Optional[str]) -> bool:
+_api_token_cache: Dict[str, Optional[dt.datetime]] = {"token": None, "expires_at": None}
+
+
+def _token_is_expired(expires_at: Optional[dt.datetime]) -> bool:
     if not expires_at:
         return True
 
-    try:
-        expiry_dt = dt.datetime.fromisoformat(expires_at)
-    except (TypeError, ValueError):
-        return True
-
-    return dt.datetime.utcnow() >= expiry_dt
+    return dt.datetime.utcnow() >= expires_at
 
 
 def _store_api_token(token: str, expires_in: int) -> str:
     safe_expires_in = max(expires_in - 30, 30) if expires_in else 0
     expiry = dt.datetime.utcnow() + dt.timedelta(seconds=safe_expires_in)
-    session["api_token"] = token
-    session["api_token_expires_at"] = expiry.isoformat()
+    _api_token_cache["token"] = token
+    _api_token_cache["expires_at"] = expiry
     return token
 
 
@@ -354,8 +431,8 @@ def request_api_token() -> Optional[str]:
 
 
 def get_api_token(force_refresh: bool = False) -> Optional[str]:
-    cached_token = session.get("api_token")
-    expires_at = session.get("api_token_expires_at")
+    cached_token = _api_token_cache.get("token")
+    expires_at = _api_token_cache.get("expires_at")
 
     if not force_refresh and cached_token and not _token_is_expired(expires_at):
         return cached_token
@@ -364,6 +441,9 @@ def get_api_token(force_refresh: bool = False) -> Optional[str]:
 
 
 def fetch_product_from_api(code: str) -> Optional[Dict[str, str]]:
+    if not CODE_PATTERN.fullmatch(code):
+        return None
+
     url = API_URL_TEMPLATE.format(code=code)
     token = get_api_token()
     if not token:
@@ -467,7 +547,7 @@ def parse_codes(raw_codes: str, csv_file) -> List[str]:
 
     def add_code(value: str) -> None:
         code = value.strip()
-        if code and code not in codes:
+        if code and CODE_PATTERN.fullmatch(code) and code not in codes:
             codes.append(code)
 
     for code in re.split(r"[\n,]+", raw_codes):
@@ -525,6 +605,7 @@ def home():
 
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
 def login():
     if session.get("user"):
         return redirect(url_for("codes"))
@@ -532,11 +613,17 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
+
+        if not username_is_valid(username):
+            flash("Inserisci un username valido (3-64 caratteri alfanumerici e simboli ._-).")
+            return render_template("login.html")
+
         with SessionLocal() as db_session:
             user = db_session.execute(
                 select(User).where(User.username == username)
             ).scalar_one_or_none()
-            if user and user.password_hash == hash_password(password):
+            if user and verify_password(password, user.password_hash):
+                session.permanent = True
                 session["user"] = username
                 session.pop("products", None)
                 return redirect(url_for("codes"))
@@ -545,6 +632,7 @@ def login():
 
 
 @app.route("/register", methods=["GET", "POST"])
+@limiter.limit("10 per hour")
 def register():
     if session.get("user"):
         return redirect(url_for("codes"))
@@ -554,8 +642,12 @@ def register():
         password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
 
-        if not username or not password:
-            flash("Inserisci username e password per registrarti.")
+        if not username_is_valid(username):
+            flash("Username non valido. Usa 3-64 caratteri alfanumerici o simboli ._-.")
+            return render_template("register.html")
+
+        if not password_is_valid(password):
+            flash("Password non conforme: minimo 12 caratteri con maiuscola, minuscola e numero.")
             return render_template("register.html")
 
         if password != confirm_password:
@@ -579,11 +671,12 @@ def register():
 
 
 @app.route("/password-dimenticata", methods=["GET", "POST"])
+@limiter.limit("5 per hour")
 def forgot_password():
     if request.method == "POST":
         identifier = request.form.get("username", "").strip()
-        if not identifier:
-            flash("Inserisci l'email o l'username associato all'account.")
+        if not username_is_valid(identifier):
+            flash("Inserisci un username valido per procedere al reset.")
             return render_template("forgot_password.html")
 
         with SessionLocal() as db_session:
@@ -612,6 +705,7 @@ def logout():
 
 
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
+@limiter.limit("5 per hour")
 def reset_password(token: str):
     with SessionLocal() as db_session:
         reset_request = db_session.execute(
@@ -628,8 +722,8 @@ def reset_password(token: str):
         new_password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
 
-        if len(new_password) < 8:
-            flash("La password deve contenere almeno 8 caratteri.")
+        if not password_is_valid(new_password):
+            flash("La password deve avere minimo 12 caratteri, maiuscola, minuscola e numero.")
             return render_template("reset_password.html", username=user.username, token=token)
 
         if new_password != confirm_password:
@@ -662,14 +756,18 @@ def reset_password(token: str):
 
 @app.route("/codici", methods=["GET", "POST"])
 @login_required
+@limiter.limit("30 per hour")
 def codes():
     if request.method == "POST":
         raw_codes = request.form.get("codes", "")
         csv_file = request.files.get("csv_file")
 
         codes = parse_codes(raw_codes, csv_file)
+        if len(codes) > 100:
+            flash("Puoi inviare massimo 100 codici per richiesta; i restanti sono stati ignorati.")
+            codes = codes[:100]
         if not codes:
-            flash("Inserisci almeno un codice prodotto.")
+            flash("Inserisci almeno un codice prodotto valido (caratteri alfanumerici, ._-).")
         else:
             products, missing_codes = build_products(codes)
             session["products"] = [product.__dict__ for product in products]
@@ -735,6 +833,10 @@ def results():
 @app.route("/prodotto/<code>", methods=["GET", "POST"])
 @login_required
 def product_detail(code: str):
+    if not CODE_PATTERN.fullmatch(code):
+        flash("Codice prodotto non valido.")
+        return redirect(url_for("results"))
+
     products: Optional[List[Dict[str, str]]] = session.get("products")
     if not products:
         flash("Nessun prodotto richiesto. Inserisci i codici per continuare.")
@@ -748,6 +850,7 @@ def product_detail(code: str):
     if request.method == "POST":
         try:
             price_value = float(request.form.get("price", product.get("price", 0.0)))
+            price_value = max(price_value, 0.0)
         except (TypeError, ValueError):
             price_value = product.get("price", 0.0)
 
@@ -755,10 +858,10 @@ def product_detail(code: str):
             {
                 "denominazione_vendita": request.form.get(
                     "denominazione_vendita", product.get("denominazione_vendita", "")
-                ),
+                )[:255],
                 "descrizione_marketing": request.form.get(
                     "descrizione_marketing", product.get("descrizione_marketing", "")
-                ),
+                )[:1024],
                 "price": price_value,
             }
         )
@@ -770,5 +873,36 @@ def product_detail(code: str):
     return render_template("product.html", product=product)
 
 
+if hasattr(app, "after_request"):
+
+    @app.after_request
+    def apply_security_headers(response):
+        csp = (
+            "default-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com; "
+            "img-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+            "script-src 'self' https://cdn.jsdelivr.net; "
+            "font-src 'self' https://fonts.gstatic.com;"
+        )
+        response.headers.setdefault("Content-Security-Policy", csp)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+        )
+        if app.config.get("SESSION_COOKIE_SECURE"):
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
+            )
+        return response
+
+
+else:  # pragma: no cover - fallback for dummy Flask in tests
+
+    def apply_security_headers(response):
+        return response
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=os.getenv("FLASK_DEBUG", "0") == "1")
