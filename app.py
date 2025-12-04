@@ -49,6 +49,7 @@ except ImportError:  # pragma: no cover - fallback for offline environments
 
 try:
     from flask_wtf import CSRFProtect
+    from flask_wtf.csrf import generate_csrf
 except ImportError:  # pragma: no cover - fallback for offline environments
     class CSRFProtect:  # type: ignore
         def __init__(self, app=None):
@@ -57,6 +58,9 @@ except ImportError:  # pragma: no cover - fallback for offline environments
         def __call__(self, app):
             self.app = app
             return app
+
+    def generate_csrf() -> str:
+        return secrets.token_urlsafe(32)
 from openai import OpenAI
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, create_engine, select
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
@@ -92,6 +96,10 @@ else:  # pragma: no cover - fallback for tests without real Flask
         if key.isupper():
             app.config[key] = value
 csrf = CSRFProtect(app)
+if getattr(app, "jinja_env", None) is not None:
+    app.jinja_env.globals["csrf_token"] = generate_csrf
+else:  # pragma: no cover - fallback for test stubs without real Flask
+    app.jinja_env = SimpleNamespace(globals={"csrf_token": generate_csrf})
 limiter = Limiter(get_remote_address, app=app, default_limits=["100 per hour"])
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
