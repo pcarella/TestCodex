@@ -44,7 +44,11 @@ if not hasattr(app, "config"):
 
 
 class Config:
-    SECRET_KEY = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
+    SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
+    if not SECRET_KEY:
+        raise RuntimeError(
+            "FLASK_SECRET_KEY non impostata. Configura una chiave stabile e segreta prima di avviare l'applicazione."
+        )
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SECURE = os.getenv("FLASK_SECURE_COOKIES", "1") == "1"
     SESSION_COOKIE_SAMESITE = "Lax"
@@ -60,11 +64,6 @@ else:  # pragma: no cover - fallback for tests without real Flask
         if key.isupper():
             app.config[key] = value
 
-if not os.getenv("FLASK_SECRET_KEY"):
-    logger.warning(
-        "FLASK_SECRET_KEY non impostata: ne è stata generata una temporanea. "
-        "Configura una chiave sicura tramite variabile d'ambiente in produzione."
-    )
 csrf = CSRFProtect(app)
 if getattr(app, "jinja_env", None) is not None:
     app.jinja_env.globals["csrf_token"] = generate_csrf
@@ -227,6 +226,9 @@ MAX_CSV_BYTES = 1_000_000
 LOGIN_FAILURE_WINDOW = dt.timedelta(minutes=15)
 MAX_LOGIN_FAILURES = 5
 _login_failures: Dict[str, Tuple[int, dt.datetime]] = {}
+PASSWORD_RESET_WINDOW = dt.timedelta(hours=1)
+MAX_RESET_REQUESTS = 3
+_reset_requests: Dict[str, Tuple[int, dt.datetime]] = {}
 
 
 def username_is_valid(username: str) -> bool:
@@ -261,7 +263,7 @@ def classify_product_category(product_data: Dict[str, str]) -> Optional[Dict[str
         "descrizione_marketing": product_data.get("descrizione_marketing", ""),
         "price": product_data.get("price", 0.0),
     }
-    logger.info("Richiesta classificazione AI: %s", json.dumps(payload, ensure_ascii=False))
+    logger.info("Richiesta classificazione AI per codice %s", payload.get("code", ""))
 
     prompt = json.dumps(payload, ensure_ascii=False)
 
@@ -271,7 +273,10 @@ def classify_product_category(product_data: Dict[str, str]) -> Optional[Dict[str
 
     response_text = _extract_response_text(response)
     if response_text:
-        logger.info("Risposta classificazione AI: %s", response_text)
+        logger.info(
+            "Risposta classificazione AI ricevuta (lunghezza %d caratteri)",
+            len(response_text),
+        )
     else:
         logger.warning("Risposta classificazione AI vuota o non leggibile")
 
@@ -320,7 +325,10 @@ def classify_with_agent(user_prompt: str):
 
         full_text = "".join(text_chunks).strip()
         if full_text:
-            logger.info("Risposta grezza dall'agente: %s", full_text)
+            logger.info(
+                "Risposta grezza dall'agente ricevuta (lunghezza %d caratteri)",
+                len(full_text),
+            )
         else:
             logger.warning("Risposta grezza dall'agente vuota o non leggibile")
 
@@ -582,6 +590,30 @@ def _reset_login_failures(username: str, ip_address: str) -> None:
     _login_failures.pop(_login_key(username, ip_address), None)
 
 
+def _reset_key(identifier: str) -> str:
+    return identifier.lower()
+
+
+def _reset_requests_exceeded(identifier: str) -> bool:
+    key = _reset_key(identifier)
+    count, first_request = _reset_requests.get(key, (0, dt.datetime.utcnow()))
+    if dt.datetime.utcnow() - first_request > PASSWORD_RESET_WINDOW:
+        _reset_requests.pop(key, None)
+        return False
+
+    return count >= MAX_RESET_REQUESTS
+
+
+def _record_reset_request(identifier: str) -> None:
+    key = _reset_key(identifier)
+    count, first_request = _reset_requests.get(key, (0, dt.datetime.utcnow()))
+    if dt.datetime.utcnow() - first_request > PASSWORD_RESET_WINDOW:
+        count = 0
+        first_request = dt.datetime.utcnow()
+
+    _reset_requests[key] = (count + 1, first_request)
+
+
 def login_required(view_func):
     def wrapper(*args, **kwargs):
         if not session.get("user"):
@@ -652,8 +684,10 @@ def login():
                 session["session_nonce"] = secrets.token_urlsafe(16)
                 session.pop("products", None)
                 _reset_login_failures(username, get_remote_address())
+                logger.info("Login eseguito per %s da %s", username, get_remote_address())
                 return redirect(url_for("codes"))
         _record_login_failure(username, get_remote_address())
+        logger.warning("Tentativo di login non riuscito per %s da %s", username, get_remote_address())
         flash("Credenziali non valide. Riprova.")
     return render_template("login.html")
 
@@ -706,6 +740,15 @@ def forgot_password():
             flash("Inserisci un username valido per procedere al reset.")
             return render_template("forgot_password.html")
 
+        if _reset_requests_exceeded(identifier):
+            flash(
+                "Sono stati effettuati troppi tentativi di reset per questo account. Riprova più tardi."
+            )
+            logger.warning("Reset password bloccato per %s", identifier)
+            return render_template("forgot_password.html")
+
+        _record_reset_request(identifier)
+
         with SessionLocal() as db_session:
             user = db_session.execute(
                 select(User).where(User.username == identifier)
@@ -715,6 +758,7 @@ def forgot_password():
             token = persist_reset_token(user.id)
             reset_url = url_for("reset_password", token=token, _external=True)
             send_reset_email(identifier, reset_url)
+            logger.info("Reset password inviato per utente %s", identifier)
 
         flash(
             "Se l'account esiste, riceverai un'email con il link per reimpostare la password."
@@ -775,6 +819,7 @@ def reset_password(token: str):
             for token_instance in tokens:
                 db_session.delete(token_instance)
 
+        logger.info("Password aggiornata con successo per utente %s", user.username)
         flash("Password aggiornata con successo. Accedi con le nuove credenziali.")
         return redirect(url_for("login"))
 
@@ -907,9 +952,11 @@ if hasattr(app, "after_request"):
         csp = (
             "default-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com; "
             "img-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+            "style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
             "script-src 'self' https://cdn.jsdelivr.net; "
-            "font-src 'self' https://fonts.gstatic.com;"
+            "font-src 'self' https://fonts.gstatic.com; "
+            "form-action 'self'; "
+            "frame-ancestors 'none';"
         )
         response.headers.setdefault("Content-Security-Policy", csp)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")

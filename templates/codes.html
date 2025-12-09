@@ -40,14 +40,14 @@
               placeholder="Es.\n1234567890\n9876543210\n0001122333"
             >{{ request.form.get('codes', '') }}</textarea>
             <div class="form-text" id="codes-helper" aria-live="polite">Minimo 1 codice, massimo 100. Puoi incollare anche da Excel. <span class="fw-semibold" id="code-count">0 codici</span>.</div>
-            <div class="invalid-feedback d-block text-danger small" id="codes-error" aria-live="assertive" role="alert" style="display: none;">Inserisci almeno un codice o carica un CSV prima di procedere.</div>
+            <div class="invalid-feedback d-block text-danger small d-none" id="codes-error" aria-live="assertive" role="alert">Inserisci almeno un codice o carica un CSV prima di procedere.</div>
           </div>
 
           <div class="my-3 text-center text-muted">— oppure —</div>
 
           <div class="mb-4 d-flex align-items-center gap-3 flex-wrap align-items-start">
             <div class="d-flex align-items-center gap-2 flex-grow-1">
-              <div class="bg-warning-subtle text-warning-emphasis rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+              <div class="bg-warning-subtle text-warning-emphasis rounded-circle d-inline-flex align-items-center justify-content-center circle-40">
                 <span class="fw-bold">CSV</span>
               </div>
               <div>
