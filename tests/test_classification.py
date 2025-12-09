@@ -119,12 +119,46 @@ sqlalchemy_orm_stub = types.SimpleNamespace(
 
 requests_stub = types.SimpleNamespace(get=lambda *args, **kwargs: types.SimpleNamespace(status_code=404))
 openai_stub = types.SimpleNamespace(OpenAI=lambda api_key=None: types.SimpleNamespace())
+csrf_stub = types.SimpleNamespace(
+    CSRFProtect=lambda app=None: None,
+)
+werkzeug_security_stub = types.SimpleNamespace(
+    generate_password_hash=lambda password, method=None, salt_length=None: password,
+    check_password_hash=lambda pwhash, password: pwhash == password,
+)
+
+
+class _DummyLimiter:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def limit(self, *args, **kwargs):
+        def decorator(func):
+            return func
+
+        return decorator
+
+    def __call__(self, *args, **kwargs):
+        return self
+
+
+limiter_stub = types.SimpleNamespace(
+    Limiter=_DummyLimiter, util=types.SimpleNamespace(get_remote_address=lambda: "127.0.0.1")
+)
+csrf_csrf_stub = types.SimpleNamespace(generate_csrf=lambda: "token")
+defusedxml_stub = types.SimpleNamespace(ElementTree=types.SimpleNamespace(fromstring=lambda x: None))
 
 sys.modules.setdefault("flask", flask_stub)
 sys.modules.setdefault("sqlalchemy", sqlalchemy_stub)
 sys.modules.setdefault("sqlalchemy.orm", sqlalchemy_orm_stub)
 sys.modules.setdefault("requests", requests_stub)
 sys.modules.setdefault("openai", openai_stub)
+sys.modules.setdefault("flask_wtf", csrf_stub)
+sys.modules.setdefault("flask_wtf.csrf", csrf_csrf_stub)
+sys.modules.setdefault("flask_limiter", limiter_stub)
+sys.modules.setdefault("flask_limiter.util", limiter_stub.util)
+sys.modules.setdefault("defusedxml", defusedxml_stub)
+sys.modules.setdefault("werkzeug.security", werkzeug_security_stub)
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
