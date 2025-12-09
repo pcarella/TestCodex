@@ -27,63 +27,66 @@
   </head>
   <body>
     {% set current_endpoint = request.endpoint %}
+    {% set auth_pages = ['login', 'register', 'forgot_password', 'reset_password'] %}
     {% set step_lookup = {'login': 0, 'codes': 1, 'results': 2, 'product_detail': 3} %}
     {% set step_index = step_lookup.get(current_endpoint, 0) %}
 
-    <header class="app-header mb-4">
-      <div class="container">
-        <div class="app-header__inner">
-          <div class="app-brand">
-            <img
-              src="{{ url_for('static', filename='logo.png') }}"
-              alt="PIM Assistant"
-              class="brand-logo"
-            />
-          </div>
+    {% if current_endpoint not in auth_pages %}
+      <header class="app-header mb-4">
+        <div class="container">
+          <div class="app-header__inner">
+            <div class="app-brand">
+              <img
+                src="{{ url_for('static', filename='logo.png') }}"
+                alt="PIM Assistant"
+                class="brand-logo"
+              />
+            </div>
 
-          <div class="app-steps" aria-label="Progressione del flusso">
-            {% set steps = [
-              {'label': 'Login', 'endpoint': 'login'},
-              {'label': 'Codice prodotto', 'endpoint': 'codes'},
-              {'label': 'Flusso PIM', 'endpoint': 'results'},
-              {'label': 'Dettaglio', 'endpoint': 'product_detail'}
-            ] %}
-            {% for step in steps %}
-              {% set status = 'completed' if loop.index0 < step_index else 'active' if loop.index0 == step_index else 'upcoming' %}
-              {% set is_clickable = loop.index0 < step_index %}
-              {% if is_clickable %}
-                <a class="app-step {{ status }} text-decoration-none" href="{{ url_for(step.endpoint) }}" aria-label="Vai a {{ step.label }}">
-                  <span class="app-step__label">{{ step.label }}</span>
-                </a>
-              {% else %}
-                <div class="app-step {{ status }}" aria-current="step">
-                  <span class="app-step__label">{{ step.label }}</span>
-                </div>
-              {% endif %}
-            {% endfor %}
-          </div>
+            <div class="app-steps" aria-label="Progressione del flusso">
+              {% set steps = [
+                {'label': 'Login', 'endpoint': 'login'},
+                {'label': 'Codice prodotto', 'endpoint': 'codes'},
+                {'label': 'Flusso PIM', 'endpoint': 'results'},
+                {'label': 'Dettaglio', 'endpoint': 'product_detail'}
+              ] %}
+              {% for step in steps %}
+                {% set status = 'completed' if loop.index0 < step_index else 'active' if loop.index0 == step_index else 'upcoming' %}
+                {% set is_clickable = loop.index0 < step_index %}
+                {% if is_clickable %}
+                  <a class="app-step {{ status }} text-decoration-none" href="{{ url_for(step.endpoint) }}" aria-label="Vai a {{ step.label }}">
+                    <span class="app-step__label">{{ step.label }}</span>
+                  </a>
+                {% else %}
+                  <div class="app-step {{ status }}" aria-current="step">
+                    <span class="app-step__label">{{ step.label }}</span>
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
 
-          <div class="d-flex align-items-center gap-3">
-            <div class="app-user">
+            <div class="d-flex align-items-center gap-3">
+              <div class="app-user">
+                {% if session.get('user') %}
+                  {% set initials = session['user'][:2].upper() %}
+                  <div class="app-user__badge">{{ initials }}</div>
+                  <div class="app-user__info">
+                    <div class="app-user__name">{{ session['user'] }}</div>
+                    <div class="app-user__role">Team ESI</div>
+                  </div>
+                  <span class="app-user__caret">⌄</span>
+                {% endif %}
+              </div>
               {% if session.get('user') %}
-                {% set initials = session['user'][:2].upper() %}
-                <div class="app-user__badge">{{ initials }}</div>
-                <div class="app-user__info">
-                  <div class="app-user__name">{{ session['user'] }}</div>
-                  <div class="app-user__role">Team ESI</div>
-                </div>
-                <span class="app-user__caret">⌄</span>
+                <a class="btn btn-outline-secondary" href="{{ url_for('logout') }}">Logout</a>
               {% endif %}
             </div>
-            {% if session.get('user') %}
-              <a class="btn btn-outline-secondary" href="{{ url_for('logout') }}">Logout</a>
-            {% endif %}
           </div>
         </div>
-      </div>
-    </header>
+      </header>
+    {% endif %}
 
-    <main class="container">
+    <main class="container {% if current_endpoint in auth_pages %}auth-container{% endif %}">
       {% with messages = get_flashed_messages() %}
       {% if messages %}
       <div class="alert alert-warning" role="alert" aria-live="assertive" id="flash-messages">
