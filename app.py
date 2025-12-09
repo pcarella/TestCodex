@@ -217,6 +217,7 @@ STATUS_CHOICES = {
     "ready": {"label": "Pronto", "badge": "success"},
     "review": {"label": "Richiede revisione", "badge": "warning"},
     "error": {"label": "Errore", "badge": "danger"},
+    "exported": {"label": "Esportato", "badge": "secondary"},
 }
 
 CODE_PATTERN = re.compile(r"^[A-Za-z0-9._-]{3,64}$")
@@ -560,6 +561,18 @@ def parse_codes(raw_codes: str, csv_file) -> List[str]:
     return codes
 
 
+def _get_session_products() -> List[Dict[str, str]]:
+    return session.get("products") or []
+
+
+def _persist_products(products: List[Dict[str, str]]) -> None:
+    session["products"] = products
+
+
+def _status_counters(products: List[Dict[str, str]]) -> Dict[str, int]:
+    return {key: sum(1 for p in products if p.get("status") == key) for key in STATUS_CHOICES}
+
+
 def _login_key(username: str, ip_address: str) -> str:
     return f"{username.lower()}:{ip_address}"
 
@@ -900,6 +913,49 @@ def results():
         categories=categories,
         status_counts=status_counts,
     )
+
+
+@app.post("/api/prodotti/stato")
+@login_required
+def update_product_status():
+    products = _get_session_products()
+    if not products:
+        return {"message": "Nessun prodotto attivo nella sessione."}, 400
+
+    payload = request.get_json(silent=True) or {}
+    requested_codes = payload.get("codes") or []
+    target_status = payload.get("status", "")
+
+    if not isinstance(requested_codes, list) or not all(
+        isinstance(code, str) for code in requested_codes
+    ):
+        return {"message": "Formato codici non valido."}, 400
+
+    if target_status not in STATUS_CHOICES:
+        return {"message": "Stato richiesto non valido."}, 400
+
+    updated_codes: List[str] = []
+    skipped_codes: List[str] = []
+
+    for product in products:
+        if product.get("code") not in requested_codes:
+            continue
+
+        current_status = product.get("status", "review")
+        if target_status == "exported" and current_status != "ready":
+            skipped_codes.append(product.get("code", ""))
+            continue
+
+        product["status"] = target_status
+        updated_codes.append(product.get("code", ""))
+
+    _persist_products(products)
+
+    return {
+        "updated_codes": updated_codes,
+        "skipped_codes": skipped_codes,
+        "status_counts": _status_counters(products),
+    }
 
 
 @app.route("/prodotto/<code>", methods=["GET", "POST"])

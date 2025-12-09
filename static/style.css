@@ -420,6 +420,16 @@ textarea.form-control {
   background: #ef4444;
 }
 
+.status-exported {
+  background: #eef2ff;
+  color: #312e81;
+  border-color: #c7d2fe;
+}
+
+.status-exported .status-dot {
+  background: #6366f1;
+}
+
 .filter-tag {
   display: inline-flex;
   align-items: center;
