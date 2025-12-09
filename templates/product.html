@@ -15,8 +15,24 @@
           </ol>
         </nav>
       </div>
-      <div class="d-flex align-items-center gap-3">
-        <div class="badge rounded-pill text-bg-warning text-dark px-3 py-2 shadow-sm">Step 3/3 · In revisione</div>
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        {% set status_meta = status_choices.get(product.status, {'label': product.status, 'badge': 'secondary'}) %}
+        <span class="status-pill status-{{ product.status }}" data-role="product-status">
+          <span class="status-dot"></span>
+          <span class="status-text" data-role="product-status-label">{{ status_meta.label }}</span>
+        </span>
+        {% if product.status not in ['ready', 'exported'] %}
+        <button
+          type="button"
+          class="btn btn-outline-primary"
+          id="approve-product-btn"
+          data-code="{{ product.code }}"
+        >
+          Approva
+        </button>
+        {% else %}
+        <span class="badge text-bg-light border">Non sono necessarie azioni</span>
+        {% endif %}
         <a class="btn btn-outline-secondary" href="{{ url_for('results') }}">Torna ai risultati</a>
       </div>
     </div>
@@ -207,10 +223,50 @@
 </div>
 <script>
   (function () {
+    const statusChoices = {{ status_choices | tojson }};
+    const approveButton = document.getElementById("approve-product-btn");
+    const statusLabel = document.querySelector('[data-role="product-status-label"]');
+    const statusPill = document.querySelector('[data-role="product-status"]');
     const form = document.querySelector("form");
     const submitButton = document.getElementById("submit-product");
     const spinner = submitButton?.querySelector(".spinner-border");
     const label = submitButton?.querySelector(".submit-label");
+
+    const updateStatusUi = (statusKey) => {
+      if (statusPill) statusPill.className = `status-pill status-${statusKey}`;
+      if (statusLabel)
+        statusLabel.textContent = statusChoices?.[statusKey]?.label || statusKey;
+    };
+
+    approveButton?.addEventListener("click", async () => {
+      approveButton.setAttribute("disabled", "disabled");
+      try {
+        const response = await fetch("{{ url_for('update_product_status') }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": "{{ csrf_token() }}",
+          },
+          body: JSON.stringify({ codes: [approveButton.dataset.code], status: "ready" }),
+        });
+
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.message || "Aggiornamento stato non riuscito.");
+        }
+
+        if (payload.updated_codes?.length) {
+          updateStatusUi("ready");
+          approveButton.classList.add("d-none");
+          console.log("Prodotto approvato", payload.updated_codes);
+        }
+      } catch (error) {
+        approveButton.removeAttribute("disabled");
+        console.error("Errore durante l'aggiornamento dello stato del prodotto", error);
+        alert(error.message);
+      }
+    });
+
     form?.addEventListener("submit", () => {
       submitButton.setAttribute("disabled", "disabled");
       spinner?.classList.remove("d-none");
