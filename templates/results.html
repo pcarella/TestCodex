@@ -4,6 +4,7 @@
 {% set ready_count = status_counts.get('ready', 0) %}
 {% set review_count = status_counts.get('review', 0) %}
 {% set error_count = status_counts.get('error', 0) %}
+{% set exported_count = status_counts.get('exported', 0) %}
 
 <div class="d-flex flex-wrap gap-3 justify-content-between align-items-start mb-3">
   <div>
@@ -16,7 +17,12 @@
       <span class="fw-bold">{{ total }}</span>
       <span class="text-muted">prodotti trovati</span>
     </div>
-    <div class="small text-muted">{{ ready_count }} pronti, {{ review_count }} da rivedere, {{ error_count }} in errore.</div>
+    <div class="small text-muted">
+      <span id="ready-count">{{ ready_count }}</span> pronti,
+      <span id="review-count">{{ review_count }}</span> da rivedere,
+      <span id="error-count">{{ error_count }}</span> in errore,
+      <span id="exported-count">{{ exported_count }}</span> esportati.
+    </div>
   </div>
 </div>
 
@@ -26,6 +32,7 @@
       <li><span class="status-pill status-ready"><span class="status-dot"></span>Pronto</span> Contenuti completi e pronti per il PIM.</li>
       <li><span class="status-pill status-review"><span class="status-dot"></span>Richiede revisione</span> Controlla titolo o categoria prima di inviare.</li>
       <li><span class="status-pill status-error"><span class="status-dot"></span>Errore</span> Codice non riconosciuto o dati mancanti.</li>
+      <li><span class="status-pill status-exported"><span class="status-dot"></span>Esportato</span> Già inviato al PIM.</li>
     </ul>
   </div>
 
@@ -86,6 +93,7 @@
         <span class="badge rounded-pill text-bg-light border">Filtro attivo: {{ 'sì' if status_filter or category_filter or search_query else 'no' }}</span>
       </div>
       <div class="d-flex gap-2 flex-wrap justify-content-end">
+        <button class="btn btn-outline-primary" type="button" id="approve-btn" disabled>Approva selezionati</button>
         <button class="btn btn-outline-secondary" type="button" id="remove-btn" disabled>Rimuovi selezionati</button>
         <button class="btn btn-outline-secondary" type="button" id="export-btn" disabled>
           <span class="spinner-border spinner-border-sm align-text-bottom me-2 d-none" role="status" aria-hidden="true"></span>
@@ -119,10 +127,10 @@
         </thead>
         <tbody>
           {% for product in products %}
-          <tr class="{% if search_query or status_filter or category_filter %}filtered-highlight{% endif %}">
+          <tr class="{% if search_query or status_filter or category_filter %}filtered-highlight{% endif %}" data-code="{{ product.code }}" data-status="{{ product.status }}">
             <td>
               <div class="form-check mb-0">
-                <input class="form-check-input product-select" type="checkbox" value="{{ product.code }}" aria-label="Seleziona {{ product.code }}" />
+                <input class="form-check-input product-select" type="checkbox" value="{{ product.code }}" aria-label="Seleziona {{ product.code }}" data-status="{{ product.status }}" />
               </div>
             </td>
             <td class="fw-semibold">{{ product.code }}</td>
@@ -153,14 +161,19 @@
             <td>
               {% set status_key = product.status %}
               {% set status_meta = status_choices.get(status_key, {'label': status_key, 'badge': 'secondary'}) %}
-              <span class="status-pill status-{{ status_key }}">
+              <span class="status-pill status-{{ status_key }}" data-role="status-pill">
                 <span class="status-dot"></span>
-                {{ status_meta.label }}
+                <span class="status-text">{{ status_meta.label }}</span>
               </span>
             </td>
             <td class="text-end">
               <a class="btn btn-link text-decoration-none" href="{{ url_for('product_detail', code=product.code) }}">Modifica</a>
-              <button class="btn btn-outline-secondary ms-2" type="button">Invia al PIM</button>
+              {% if product.status != 'exported' %}
+              <button class="btn btn-outline-primary ms-2 action-approve" type="button" data-code="{{ product.code }}" {% if product.status == 'ready' %}disabled{% endif %}>Approva</button>
+              <button class="btn btn-outline-secondary ms-2 action-export" type="button" data-code="{{ product.code }}" {% if product.status != 'ready' %}disabled{% endif %}>Invia al PIM</button>
+              {% else %}
+              <span class="badge text-bg-light border">Già esportato</span>
+              {% endif %}
             </td>
           </tr>
           {% else %}
@@ -176,43 +189,162 @@
 <script>
   (function () {
     const selectAll = document.getElementById("select-all");
-    const productCheckboxes = Array.from(document.querySelectorAll(".product-select"));
     const selectedCountEl = document.getElementById("selected-count");
-    const buttonsToToggle = [
-      document.getElementById("export-btn"),
-      document.getElementById("save-btn"),
-      document.getElementById("remove-btn"),
-    ];
+    const approveBtn = document.getElementById("approve-btn");
+    const removeBtn = document.getElementById("remove-btn");
+    const exportBtn = document.getElementById("export-btn");
+    const saveBtn = document.getElementById("save-btn");
+    const statusChoices = {{ status_choices | tojson }};
+    const statusCountsEls = {
+      ready: document.getElementById("ready-count"),
+      review: document.getElementById("review-count"),
+      error: document.getElementById("error-count"),
+      exported: document.getElementById("exported-count"),
+    };
+
+    const getCheckboxes = () => Array.from(document.querySelectorAll(".product-select"));
+    const getSelectedCheckboxes = () => getCheckboxes().filter((cb) => cb.checked);
+
+    const updateSummaryCounts = (counts) => {
+      Object.entries(statusCountsEls).forEach(([key, el]) => {
+        if (el && typeof counts?.[key] === "number") {
+          el.textContent = counts[key];
+        }
+      });
+    };
+
+    const updateRowStatus = (code, statusKey) => {
+      const row = document.querySelector(`tr[data-code="${code}"]`);
+      if (!row) return;
+      row.dataset.status = statusKey;
+      const checkbox = row.querySelector(".product-select");
+      if (checkbox) {
+        checkbox.dataset.status = statusKey;
+      }
+
+      const pill = row.querySelector('[data-role="status-pill"]');
+      if (pill) {
+        pill.className = `status-pill status-${statusKey}`;
+        const textEl = pill.querySelector('.status-text');
+        if (textEl) {
+          textEl.textContent = statusChoices?.[statusKey]?.label || statusKey;
+        }
+      }
+
+      const approveAction = row.querySelector('.action-approve');
+      const exportAction = row.querySelector('.action-export');
+
+      if (approveAction) {
+        approveAction.disabled = statusKey === "ready" || statusKey === "exported";
+      }
+
+      if (exportAction) {
+        exportAction.disabled = statusKey !== "ready";
+      }
+
+      if (statusKey === "exported" && exportAction) {
+        exportAction.classList.add("d-none");
+      }
+    };
 
     const updateSelectionUi = () => {
-      const selected = productCheckboxes.filter((cb) => cb.checked);
+      const checkboxes = getCheckboxes();
+      const selected = getSelectedCheckboxes();
       const count = selected.length;
       if (selectedCountEl) {
         selectedCountEl.textContent = `${count} prodotto${count === 1 ? '' : 'i'} selezionato${count === 1 ? '' : 'i'}`;
       }
 
-      buttonsToToggle.forEach((btn) => {
-        if (!btn) return;
-        btn.disabled = count === 0;
-      });
+      const anySelected = count > 0;
+      if (approveBtn) approveBtn.disabled = !anySelected;
+      if (removeBtn) removeBtn.disabled = !anySelected;
+
+      const allReady = selected.length > 0 && selected.every((cb) => cb.dataset.status === "ready");
+      if (exportBtn) exportBtn.disabled = !allReady;
+      if (saveBtn) saveBtn.disabled = !allReady;
 
       if (selectAll) {
-        const allChecked = count === productCheckboxes.length && count > 0;
+        const allChecked = count === checkboxes.length && count > 0;
         selectAll.checked = allChecked;
-        selectAll.indeterminate = count > 0 && count < productCheckboxes.length;
+        selectAll.indeterminate = count > 0 && count < checkboxes.length;
       }
     };
 
     selectAll?.addEventListener("change", (event) => {
       const { checked } = event.target;
-      productCheckboxes.forEach((cb) => {
-        cb.checked = checked;
+      getCheckboxes().forEach((cb) => {
+        if (!cb.disabled) {
+          cb.checked = checked;
+        }
       });
       updateSelectionUi();
     });
 
-    productCheckboxes.forEach((checkbox) => {
+    document.querySelectorAll(".product-select").forEach((checkbox) => {
       checkbox.addEventListener("change", updateSelectionUi);
+    });
+
+    const statusEndpoint = "{{ url_for('update_product_status') }}";
+
+    const applyStatusChange = async (codes, statusKey) => {
+      const response = await fetch(statusEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": "{{ csrf_token() }}",
+        },
+        body: JSON.stringify({ codes, status: statusKey }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.message || "Aggiornamento stato non riuscito.");
+      }
+
+      payload.updated_codes?.forEach((code) => updateRowStatus(code, statusKey));
+      if (payload.status_counts) updateSummaryCounts(payload.status_counts);
+      updateSelectionUi();
+
+      return payload;
+    };
+
+    approveBtn?.addEventListener("click", async () => {
+      const codes = getSelectedCheckboxes().map((cb) => cb.value);
+      if (!codes.length) return;
+      try {
+        await applyStatusChange(codes, "ready");
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    document.querySelectorAll('.action-approve').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const code = btn.dataset.code;
+        try {
+          await applyStatusChange([code], "ready");
+        } catch (error) {
+          alert(error.message);
+        }
+      });
+    });
+
+    const handleExport = async (codes) => {
+      if (!codes.length) return;
+      try {
+        const payload = await applyStatusChange(codes, "exported");
+        if (payload?.skipped_codes?.length) {
+          alert(`Alcuni prodotti non erano pronti e sono stati ignorati: ${payload.skipped_codes.join(', ')}`);
+        }
+      } catch (error) {
+        alert(error.message);
+      }
+    };
+
+    exportBtn?.addEventListener("click", () => handleExport(getSelectedCheckboxes().map((cb) => cb.value)));
+
+    document.querySelectorAll('.action-export').forEach((btn) => {
+      btn.addEventListener('click', () => handleExport([btn.dataset.code]));
     });
 
     const wireLoading = (buttonId, successLabel) => {
@@ -233,18 +365,11 @@
       });
     };
 
-    const removeBtn = document.getElementById("remove-btn");
     removeBtn?.addEventListener("click", () => {
       if (removeBtn.disabled) return;
-      productCheckboxes
-        .filter((cb) => cb.checked)
-        .forEach((cb) => {
-          cb.closest("tr")?.remove();
-        });
-
-      const remaining = Array.from(document.querySelectorAll(".product-select"));
-      productCheckboxes.length = 0;
-      remaining.forEach((cb) => productCheckboxes.push(cb));
+      getSelectedCheckboxes().forEach((cb) => {
+        cb.closest("tr")?.remove();
+      });
       updateSelectionUi();
     });
 
