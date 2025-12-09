@@ -123,6 +123,12 @@ main.container {
   padding-bottom: 3rem;
 }
 
+.auth-container {
+  max-width: 720px;
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
 .card {
   border: 1px solid var(--border);
   border-radius: 14px;
