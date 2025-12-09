@@ -1007,11 +1007,19 @@ if hasattr(app, "after_request"):
 
     @app.after_request
     def apply_security_headers(response):
+        commerce_host = (
+            "https://cfp5zmx7oc-conadscrl1-s2-public.model-t.cc.commerce.ondemand.com"
+        )
         csp = (
-            "default-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com; "
-            "img-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; "
+            "default-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com "
+            f"{commerce_host}; "
+            "img-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com "
+            "https://spesaonline.conad.it https://via.placeholder.com; "
             "style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net "
+            f"{commerce_host}; "
+            "connect-src 'self' "
+            f"{commerce_host}; "
             "font-src 'self' https://fonts.gstatic.com; "
             "form-action 'self'; "
             "frame-ancestors 'none';"
