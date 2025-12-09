@@ -87,22 +87,25 @@
 
   <div class="card brand-card">
     <div class="card-body">
-      <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+    <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
       <div class="d-flex align-items-center gap-3 text-muted small">
         <span class="text-muted" id="selected-count">0 prodotti selezionati</span>
         <span class="badge rounded-pill text-bg-light border">Filtro attivo: {{ 'sì' if status_filter or category_filter or search_query else 'no' }}</span>
       </div>
-      <div class="d-flex gap-2 flex-wrap justify-content-end">
-        <button class="btn btn-outline-primary" type="button" id="approve-btn" disabled>Approva selezionati</button>
-        <button class="btn btn-outline-secondary" type="button" id="remove-btn" disabled>Rimuovi selezionati</button>
-        <button class="btn btn-outline-secondary" type="button" id="export-btn" disabled>
-          <span class="spinner-border spinner-border-sm align-text-bottom me-2 d-none" role="status" aria-hidden="true"></span>
-          <span class="btn-label">Esporta risultati</span>
-        </button>
-        <button class="btn btn-primary" type="button" id="save-btn" disabled>
-          <span class="spinner-border spinner-border-sm align-text-bottom me-2 d-none" role="status" aria-hidden="true"></span>
-          <span class="btn-label">Salva tutti su PIM</span>
-        </button>
+      <div class="text-end">
+        <div class="d-flex gap-2 flex-wrap justify-content-end">
+          <button class="btn btn-outline-primary" type="button" id="approve-btn" disabled>Approva selezionati</button>
+          <button class="btn btn-outline-secondary" type="button" id="remove-btn" disabled>Rimuovi selezionati</button>
+          <button class="btn btn-outline-secondary" type="button" id="export-btn" disabled>
+            <span class="spinner-border spinner-border-sm align-text-bottom me-2 d-none" role="status" aria-hidden="true"></span>
+            <span class="btn-label">Esporta risultati</span>
+          </button>
+          <button class="btn btn-primary" type="button" id="save-btn" disabled>
+            <span class="spinner-border spinner-border-sm align-text-bottom me-2 d-none" role="status" aria-hidden="true"></span>
+            <span class="btn-label">Salva tutti su PIM</span>
+          </button>
+        </div>
+        <p class="text-muted small mb-0 mt-1">“Esporta risultati” scarica un file CSV dei prodotti selezionati, “Salva tutti su PIM” invia in blocco i prodotti pronti e li marca come esportati.</p>
       </div>
     </div>
 
@@ -167,13 +170,15 @@
               </span>
             </td>
             <td class="text-end">
-              <a class="btn btn-link text-decoration-none" href="{{ url_for('product_detail', code=product.code) }}">Modifica</a>
-              {% if product.status != 'exported' %}
-              <button class="btn btn-outline-primary ms-2 action-approve" type="button" data-code="{{ product.code }}" {% if product.status == 'ready' %}disabled{% endif %}>Approva</button>
-              <button class="btn btn-outline-secondary ms-2 action-export" type="button" data-code="{{ product.code }}" {% if product.status != 'ready' %}disabled{% endif %}>Invia al PIM</button>
-              {% else %}
-              <span class="badge text-bg-light border">Già esportato</span>
-              {% endif %}
+              <div class="d-flex justify-content-end gap-2 flex-wrap action-buttons-group">
+                <a class="btn btn-outline-secondary action-button" href="{{ url_for('product_detail', code=product.code) }}">Modifica</a>
+                {% if product.status != 'exported' %}
+                <button class="btn btn-outline-primary action-button action-approve" type="button" data-code="{{ product.code }}" {% if product.status == 'ready' %}disabled{% endif %}>Approva</button>
+                <button class="btn btn-outline-secondary action-button action-export" type="button" data-code="{{ product.code }}" {% if product.status != 'ready' %}disabled{% endif %}>Invia al PIM</button>
+                {% else %}
+                <span class="badge text-bg-light border">Già esportato</span>
+                {% endif %}
+              </div>
             </td>
           </tr>
           {% else %}
@@ -256,11 +261,11 @@
       }
 
       const anySelected = count > 0;
+      const allReady = selected.length > 0 && selected.every((cb) => cb.dataset.status === "ready");
+
       if (approveBtn) approveBtn.disabled = !anySelected;
       if (removeBtn) removeBtn.disabled = !anySelected;
-
-      const allReady = selected.length > 0 && selected.every((cb) => cb.dataset.status === "ready");
-      if (exportBtn) exportBtn.disabled = !allReady;
+      if (exportBtn) exportBtn.disabled = !anySelected;
       if (saveBtn) saveBtn.disabled = !allReady;
 
       if (selectAll) {
@@ -351,11 +356,65 @@
       }
     };
 
-    exportBtn?.addEventListener("click", () => handleExport(getSelectedCheckboxes().map((cb) => cb.value)));
+    const exportSelectionToCsv = () => {
+      const rows = getSelectedCheckboxes().map((cb) => cb.closest("tr"));
+      if (!rows.length) return;
+
+      const headers = [
+        "Codice",
+        "Categoria PIM",
+        "Categoria AI",
+        "Codice EAN",
+        "Denominazione di vendita",
+        "Prezzo",
+        "Stato",
+      ];
+
+      const escapeCsv = (value) => `"${(value || "").replace(/"/g, '""')}"`;
+
+      const extractRowData = (row) => {
+        const cells = row.querySelectorAll("td");
+        return {
+          codice: cells[1]?.textContent.trim(),
+          categoriaPim: cells[2]?.innerText.trim().replace(/\s+/g, " "),
+          categoriaAi: cells[3]?.innerText.trim().replace(/\s+/g, " "),
+          codiceEan: cells[4]?.innerText.trim(),
+          denominazione: cells[5]?.innerText.trim(),
+          prezzo: cells[6]?.innerText.trim(),
+          stato: cells[7]?.innerText.trim(),
+        };
+      };
+
+      const csvLines = rows.map((row) => {
+        const data = extractRowData(row);
+        return [
+          escapeCsv(data.codice),
+          escapeCsv(data.categoriaPim),
+          escapeCsv(data.categoriaAi),
+          escapeCsv(data.codiceEan),
+          escapeCsv(data.denominazione),
+          escapeCsv(data.prezzo),
+          escapeCsv(data.stato),
+        ].join(";");
+      });
+
+      const csvContent = [headers.join(";"), ...csvLines].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `risultati-selezionati-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    };
+
+    exportBtn?.addEventListener("click", () => exportSelectionToCsv());
 
     document.querySelectorAll('.action-export').forEach((btn) => {
       btn.addEventListener('click', () => handleExport([btn.dataset.code]));
     });
+
+    saveBtn?.addEventListener("click", () => handleExport(getSelectedCheckboxes().map((cb) => cb.value)));
 
     const wireLoading = (buttonId, successLabel) => {
       const btn = document.getElementById(buttonId);

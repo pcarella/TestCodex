@@ -166,6 +166,15 @@ main.container {
   border-color: rgba(0, 0, 0, 0.12);
 }
 
+.action-buttons-group {
+  min-width: 320px;
+}
+
+.action-button {
+  min-width: 140px;
+  text-align: center;
+}
+
 .badge.text-bg-info {
   background: #eef2ff;
   color: var(--brand-dark);
