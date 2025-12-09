@@ -652,7 +652,7 @@ def home():
 
 
 @app.route("/login", methods=["GET", "POST"])
-@limiter.limit("5 per minute")
+@limiter.limit("10 per minute")
 def login():
     if session.get("user"):
         return redirect(url_for("codes"))
