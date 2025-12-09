@@ -975,6 +975,8 @@ def product_detail(code: str):
         flash("Prodotto non trovato nella richiesta corrente.")
         return redirect(url_for("results"))
 
+    product.setdefault("status", "review")
+
     if request.method == "POST":
         try:
             price_value = float(request.form.get("price", product.get("price", 0.0)))
@@ -998,7 +1000,7 @@ def product_detail(code: str):
         flash("Prodotto aggiornato e inviato al PIM (simulato).")
         return redirect(url_for("results"))
 
-    return render_template("product.html", product=product)
+    return render_template("product.html", product=product, status_choices=STATUS_CHOICES)
 
 
 if hasattr(app, "after_request"):

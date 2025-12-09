@@ -287,25 +287,35 @@
     const statusEndpoint = "{{ url_for('update_product_status') }}";
 
     const applyStatusChange = async (codes, statusKey) => {
-      const response = await fetch(statusEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": "{{ csrf_token() }}",
-        },
-        body: JSON.stringify({ codes, status: statusKey }),
-      });
+      try {
+        const response = await fetch(statusEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": "{{ csrf_token() }}",
+          },
+          body: JSON.stringify({ codes, status: statusKey }),
+        });
 
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload?.message || "Aggiornamento stato non riuscito.");
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.message || "Aggiornamento stato non riuscito.");
+        }
+
+        payload.updated_codes?.forEach((code) => updateRowStatus(code, statusKey));
+        if (payload.status_counts) updateSummaryCounts(payload.status_counts);
+        updateSelectionUi();
+        console.log("Aggiornamento stato completato", {
+          status: statusKey,
+          updated: payload.updated_codes,
+          skipped: payload.skipped_codes,
+        });
+
+        return payload;
+      } catch (error) {
+        console.error("Errore durante l'aggiornamento dello stato", error);
+        throw error;
       }
-
-      payload.updated_codes?.forEach((code) => updateRowStatus(code, statusKey));
-      if (payload.status_counts) updateSummaryCounts(payload.status_counts);
-      updateSelectionUi();
-
-      return payload;
     };
 
     approveBtn?.addEventListener("click", async () => {
