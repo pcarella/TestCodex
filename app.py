@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import csv
 import datetime as dt
-import hashlib
 import io
 import json
+import logging
 import os
 import re
 import secrets
@@ -13,11 +13,7 @@ from types import SimpleNamespace
 from typing import Dict, List, Optional, Tuple
 
 import requests
-try:
-    from defusedxml import ElementTree
-except ImportError:  # pragma: no cover - fallback for offline environments
-    from xml.etree import ElementTree
-    print("[Security] defusedxml non disponibile: utilizzo xml.etree fallback.")
+from defusedxml import ElementTree
 from flask import (
     Flask,
     flash,
@@ -27,52 +23,20 @@ from flask import (
     session,
     url_for,
 )
-try:
-    from flask_limiter import Limiter
-    from flask_limiter.util import get_remote_address
-except ImportError:  # pragma: no cover - fallback for offline environments
-    def get_remote_address() -> str:
-        return "127.0.0.1"
-
-    class Limiter:  # type: ignore
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def limit(self, *args, **kwargs):
-            def decorator(func):
-                return func
-
-            return decorator
-
-        def __call__(self, *args, **kwargs):
-            return self
-
-try:
-    from flask_wtf import CSRFProtect
-    from flask_wtf.csrf import generate_csrf
-except ImportError:  # pragma: no cover - fallback for offline environments
-    class CSRFProtect:  # type: ignore
-        def __init__(self, app=None):
-            self.app = app
-
-        def __call__(self, app):
-            self.app = app
-            return app
-
-    def generate_csrf() -> str:
-        return secrets.token_urlsafe(32)
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_wtf import CSRFProtect
+from flask_wtf.csrf import generate_csrf
 from openai import OpenAI
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, create_engine, select
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
-try:
-    from werkzeug.security import check_password_hash, generate_password_hash
-except ImportError:  # pragma: no cover - fallback for offline environments
-    def generate_password_hash(password: str, method: str = "pbkdf2:sha256", salt_length: int = 16) -> str:
-        return hashlib.sha256(password.encode("utf-8")).hexdigest()
+from werkzeug.security import check_password_hash, generate_password_hash
 
-
-    def check_password_hash(pwhash: str, password: str) -> bool:
-        return pwhash == generate_password_hash(password)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logger = logging.getLogger("product-review")
 
 app = Flask(__name__)
 if not hasattr(app, "config"):
@@ -95,6 +59,12 @@ else:  # pragma: no cover - fallback for tests without real Flask
     for key, value in Config.__dict__.items():
         if key.isupper():
             app.config[key] = value
+
+if not os.getenv("FLASK_SECRET_KEY"):
+    logger.warning(
+        "FLASK_SECRET_KEY non impostata: ne è stata generata una temporanea. "
+        "Configura una chiave sicura tramite variabile d'ambiente in produzione."
+    )
 csrf = CSRFProtect(app)
 if getattr(app, "jinja_env", None) is not None:
     app.jinja_env.globals["csrf_token"] = generate_csrf
@@ -127,7 +97,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 Base = declarative_base()
 def _create_openai_client() -> Optional[OpenAI]:
     if not OPENAI_API_KEY:
-        print("[OpenAI] OPENAI_API_KEY non configurata: salto la classificazione AI.")
+        logger.warning("OPENAI_API_KEY non configurata: salto la classificazione AI.")
         return None
 
     try:
@@ -136,7 +106,7 @@ def _create_openai_client() -> Optional[OpenAI]:
         # Alcune versioni del client OpenAI possono rifiutare parametri imprevisti
         # (ad esempio "proxies") quando vengono inizializzate. In tal caso
         # continuiamo senza il supporto AI per evitare il crash dell'app.
-        print(f"[OpenAI] Impossibile inizializzare il client: {exc}")
+        logger.exception("Impossibile inizializzare il client OpenAI")
         return None
 
 
@@ -189,7 +159,7 @@ def send_reset_email(recipient: str, reset_url: str) -> None:
         f"\n{reset_url}\n\n"
         "Il link scade tra un'ora. Se non hai richiesto tu il reset, ignora questa email."
     )
-    print(f"[PasswordReset] Invio email a {recipient}:\n{message}")
+    logger.info("Invio email di reset a %s", recipient)
 
 
 def persist_reset_token(user_id: int) -> str:
@@ -252,6 +222,11 @@ STATUS_CHOICES = {
 
 CODE_PATTERN = re.compile(r"^[A-Za-z0-9._-]{3,64}$")
 PASSWORD_POLICY = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{12,}$")
+MAX_CODES_PER_REQUEST = 100
+MAX_CSV_BYTES = 1_000_000
+LOGIN_FAILURE_WINDOW = dt.timedelta(minutes=15)
+MAX_LOGIN_FAILURES = 5
+_login_failures: Dict[str, Tuple[int, dt.datetime]] = {}
 
 
 def username_is_valid(username: str) -> bool:
@@ -276,7 +251,7 @@ def parse_categories(product_xml: ElementTree.Element) -> List[Dict[str, str]]:
 
 def classify_product_category(product_data: Dict[str, str]) -> Optional[Dict[str, str]]:
     if not openai_client:
-        print("[OpenAI] OPENAI_API_KEY non configurata: salto la classificazione AI.")
+        logger.warning("OPENAI_API_KEY non configurata: salto la classificazione AI.")
         return None
 
     payload = {
@@ -286,7 +261,7 @@ def classify_product_category(product_data: Dict[str, str]) -> Optional[Dict[str
         "descrizione_marketing": product_data.get("descrizione_marketing", ""),
         "price": product_data.get("price", 0.0),
     }
-    print(f"[OpenAI] Richiesta classificazione: {json.dumps(payload, ensure_ascii=False)}")
+    logger.info("Richiesta classificazione AI: %s", json.dumps(payload, ensure_ascii=False))
 
     prompt = json.dumps(payload, ensure_ascii=False)
 
@@ -296,9 +271,9 @@ def classify_product_category(product_data: Dict[str, str]) -> Optional[Dict[str
 
     response_text = _extract_response_text(response)
     if response_text:
-        print(f"[OpenAI] Risposta classificazione: {response_text}")
+        logger.info("Risposta classificazione AI: %s", response_text)
     else:
-        print("[OpenAI] Risposta classificazione vuota o non leggibile.")
+        logger.warning("Risposta classificazione AI vuota o non leggibile")
 
     return parse_classification_response(response)
 
@@ -307,13 +282,11 @@ def classify_with_agent(user_prompt: str):
     if not openai_client:
         return None
     if not OPENAI_AGENT_ID:
-        print("[OpenAI] OPENAI_AGENT_ID non configurato: salto la classificazione AI.")
+        logger.warning("OPENAI_AGENT_ID non configurato: salto la classificazione AI.")
         return None
 
     try:
-        print(
-            f"[OpenAI] Invio prompt all'agente {OPENAI_AGENT_ID}: {user_prompt}"
-        )
+        logger.info("Invio prompt all'agente %s", OPENAI_AGENT_ID)
 
         thread = openai_client.beta.threads.create()
         openai_client.beta.threads.messages.create(
@@ -332,7 +305,7 @@ def classify_with_agent(user_prompt: str):
             )
 
         if run.status != "completed":
-            print(f"[OpenAI] Run non completato: stato {run.status}")
+            logger.warning("Run AI non completato: stato %s", run.status)
             return None
 
         messages = openai_client.beta.threads.messages.list(thread_id=thread.id)
@@ -347,13 +320,13 @@ def classify_with_agent(user_prompt: str):
 
         full_text = "".join(text_chunks).strip()
         if full_text:
-            print(f"[OpenAI] Risposta grezza dall'agente: {full_text}")
+            logger.info("Risposta grezza dall'agente: %s", full_text)
         else:
-            print("[OpenAI] Risposta grezza dall'agente vuota o non leggibile.")
+            logger.warning("Risposta grezza dall'agente vuota o non leggibile")
 
         return SimpleNamespace(output_text=full_text)
     except Exception as exc:
-        print(f"[OpenAI] Errore durante la classificazione: {exc}")
+        logger.exception("Errore durante la classificazione AI")
         return None
 
 
@@ -365,12 +338,12 @@ def parse_classification_response(response) -> Optional[Dict[str, str]]:
         required_keys = {"category_2_id", "category_2_name", "category_1_name", "reason"}
         if not required_keys.issubset(parsed):
             missing = required_keys - set(parsed)
-            print(f"[OpenAI] Risposta JSON mancante di campi obbligatori: {missing}")
+            logger.warning("Risposta AI mancante di campi obbligatori: %s", missing)
             return None
 
         return {key: str(parsed.get(key, "")).strip() for key in required_keys}
     except (AttributeError, IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
-        print(f"[OpenAI] Impossibile leggere la risposta AI come JSON: {exc}")
+        logger.warning("Impossibile leggere la risposta AI come JSON: %s", exc)
         return None
 
 
@@ -413,13 +386,13 @@ def request_api_token() -> Optional[str]:
             auth=(API_CLIENT_ID, API_CLIENT_SECRET),
             timeout=10,
         )
-    except Exception as exc:
-        print(f"[API] Errore durante la richiesta del token: {exc}")
+    except Exception:
+        logger.exception("Errore durante la richiesta del token OAuth2")
         return None
 
     if response.status_code != 200:
-        print(
-            f"[API] Token non ottenuto: status {response.status_code}, body {response.text}"
+        logger.error(
+            "Token non ottenuto: status %s, body %s", response.status_code, response.text
         )
         return None
 
@@ -428,11 +401,11 @@ def request_api_token() -> Optional[str]:
         token = payload.get("access_token", "")
         expires_in = int(payload.get("expires_in", 0))
     except (ValueError, json.JSONDecodeError, TypeError) as exc:
-        print(f"[API] Risposta token non valida: {exc}")
+        logger.warning("Risposta token non valida: %s", exc)
         return None
 
     if not token:
-        print("[API] Token mancante nella risposta OAuth2.")
+        logger.error("Token mancante nella risposta OAuth2")
         return None
 
     return _store_api_token(token, expires_in)
@@ -563,6 +536,10 @@ def parse_codes(raw_codes: str, csv_file) -> List[str]:
 
     if csv_file and csv_file.filename:
         content = csv_file.stream.read()
+        if len(content) > MAX_CSV_BYTES:
+            logger.warning("CSV troppo grande: %s bytes", len(content))
+            flash("Il file CSV supera il limite di 1MB e non verrà elaborato.")
+            return codes
         try:
             decoded = content.decode("utf-8")
         except UnicodeDecodeError:
@@ -573,6 +550,36 @@ def parse_codes(raw_codes: str, csv_file) -> List[str]:
             add_code(row.get("code_prodotto", ""))
 
     return codes
+
+
+def _login_key(username: str, ip_address: str) -> str:
+    return f"{username.lower()}:{ip_address}"
+
+
+def _login_locked(username: str, ip_address: str) -> bool:
+    key = _login_key(username, ip_address)
+    failures = _login_failures.get(key)
+    if not failures:
+        return False
+
+    count, first_failure = failures
+    if dt.datetime.utcnow() - first_failure > LOGIN_FAILURE_WINDOW:
+        _login_failures.pop(key, None)
+        return False
+
+    return count >= MAX_LOGIN_FAILURES
+
+
+def _record_login_failure(username: str, ip_address: str) -> None:
+    key = _login_key(username, ip_address)
+    count, first_failure = _login_failures.get(
+        key, (0, dt.datetime.utcnow())
+    )
+    _login_failures[key] = (count + 1, first_failure)
+
+
+def _reset_login_failures(username: str, ip_address: str) -> None:
+    _login_failures.pop(_login_key(username, ip_address), None)
 
 
 def login_required(view_func):
@@ -626,15 +633,27 @@ def login():
             flash("Inserisci un username valido (3-64 caratteri alfanumerici e simboli ._-).")
             return render_template("login.html")
 
+        if _login_locked(username, get_remote_address()):
+            flash(
+                "Account temporaneamente bloccato per troppi tentativi falliti. "
+                "Riprovare tra qualche minuto."
+            )
+            logger.warning("Login bloccato per %s", username)
+            return render_template("login.html")
+
         with SessionLocal() as db_session:
             user = db_session.execute(
                 select(User).where(User.username == username)
             ).scalar_one_or_none()
             if user and verify_password(password, user.password_hash):
+                session.clear()
                 session.permanent = True
                 session["user"] = username
+                session["session_nonce"] = secrets.token_urlsafe(16)
                 session.pop("products", None)
+                _reset_login_failures(username, get_remote_address())
                 return redirect(url_for("codes"))
+        _record_login_failure(username, get_remote_address())
         flash("Credenziali non valide. Riprova.")
     return render_template("login.html")
 
@@ -771,9 +790,9 @@ def codes():
         csv_file = request.files.get("csv_file")
 
         codes = parse_codes(raw_codes, csv_file)
-        if len(codes) > 100:
+        if len(codes) > MAX_CODES_PER_REQUEST:
             flash("Puoi inviare massimo 100 codici per richiesta; i restanti sono stati ignorati.")
-            codes = codes[:100]
+            codes = codes[:MAX_CODES_PER_REQUEST]
         if not codes:
             flash("Inserisci almeno un codice prodotto valido (caratteri alfanumerici, ._-).")
         else:
