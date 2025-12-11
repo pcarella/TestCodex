@@ -290,7 +290,66 @@ def phone_is_valid(phone: str) -> bool:
 
 
 def tax_code_is_valid(tax_code: str) -> bool:
-    return bool(re.fullmatch(r"[A-Za-z0-9]{11,16}", tax_code))
+    normalized = tax_code.strip().upper()
+    if not re.fullmatch(r"^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$", normalized):
+        return False
+
+    month = normalized[8]
+    if month not in "ABCDEHLMPRST":
+        return False
+
+    day_value = int(normalized[9:11])
+    if not (1 <= day_value <= 31 or 41 <= day_value <= 71):
+        return False
+
+    odd_table = {
+        **{str(i): v for i, v in enumerate([1, 0, 5, 7, 9, 13, 15, 17, 19, 21])},
+        **dict(
+            zip(
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                [
+                    1,
+                    0,
+                    5,
+                    7,
+                    9,
+                    13,
+                    15,
+                    17,
+                    19,
+                    21,
+                    2,
+                    4,
+                    18,
+                    20,
+                    11,
+                    3,
+                    6,
+                    8,
+                    12,
+                    14,
+                    16,
+                    10,
+                    22,
+                    25,
+                    24,
+                    23,
+                ],
+            )
+        ),
+    }
+    even_table = {str(i): i for i in range(10)}
+    even_table.update({letter: idx for idx, letter in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ")})
+
+    checksum_total = 0
+    for index, char in enumerate(normalized[:15]):
+        if index % 2 == 0:
+            checksum_total += odd_table[char]
+        else:
+            checksum_total += even_table[char]
+
+    expected_check = chr((checksum_total % 26) + ord("A"))
+    return normalized[-1] == expected_check
 
 
 def parse_categories(product_xml: ElementTree.Element) -> List[Dict[str, str]]:
