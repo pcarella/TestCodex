@@ -35,8 +35,9 @@ from sqlalchemy import (
     Integer,
     String,
     create_engine,
-    select,
     inspect,
+    select,
+    text,
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -215,7 +216,10 @@ def _ensure_user_contact_fields() -> None:
     with engine.begin() as connection:
         for column_name in missing:
             connection.execute(
-                f"ALTER TABLE users ADD COLUMN {column_name} {expected_columns[column_name]}"
+                text(
+                    f"ALTER TABLE users ADD COLUMN {column_name}"
+                    f" {expected_columns[column_name]}"
+                )
             )
 
 
