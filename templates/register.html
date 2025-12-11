@@ -13,6 +13,68 @@
       </div>
       <form method="post" class="login-form" novalidate>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="first_name">Nome</label>
+            <input
+              type="text"
+              class="form-control"
+              id="first_name"
+              name="first_name"
+              placeholder="Mario"
+              value="{{ request.form.get('first_name', '') }}"
+              required
+            />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="last_name">Cognome</label>
+            <input
+              type="text"
+              class="form-control"
+              id="last_name"
+              name="last_name"
+              placeholder="Rossi"
+              value="{{ request.form.get('last_name', '') }}"
+              required
+            />
+          </div>
+        </div>
+        <div class="row g-3 mt-1">
+          <div class="col-md-6">
+            <label class="form-label" for="email">Email</label>
+            <input
+              type="email"
+              class="form-control"
+              id="email"
+              name="email"
+              placeholder="mario.rossi@example.com"
+              value="{{ request.form.get('email', '') }}"
+              required
+            />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="phone">Telefono</label>
+            <input
+              type="text"
+              class="form-control"
+              id="phone"
+              name="phone"
+              placeholder="+39 333 1234567"
+              value="{{ request.form.get('phone', '') }}"
+            />
+          </div>
+        </div>
+        <div class="mb-3 mt-1">
+          <label class="form-label" for="tax_code">Codice fiscale</label>
+          <input
+            type="text"
+            class="form-control"
+            id="tax_code"
+            name="tax_code"
+            placeholder="RSSMRA80A01F205X"
+            value="{{ request.form.get('tax_code', '') }}"
+          />
+        </div>
         <div class="mb-3">
           <label class="form-label" for="username">Email o username</label>
           <input

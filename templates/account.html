@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+    <div class="login-card">
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+          <p class="text-uppercase text-muted fw-semibold mb-1 small">Profilo personale</p>
+          <h1 class="login-title mb-2">My account</h1>
+          <p class="login-subtitle mb-0">Aggiorna le tue informazioni di contatto per il team.</p>
+        </div>
+        <div class="text-end">
+          <span class="badge bg-secondary">{{ user.username }}</span>
+        </div>
+      </div>
+      <form method="post" class="login-form" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <div class="row g-4">
+          <div class="col-md-6">
+            <label class="form-label" for="first_name">Nome</label>
+            <input
+              type="text"
+              class="form-control"
+              id="first_name"
+              name="first_name"
+              value="{{ user.first_name }}"
+              required
+            />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="last_name">Cognome</label>
+            <input
+              type="text"
+              class="form-control"
+              id="last_name"
+              name="last_name"
+              value="{{ user.last_name }}"
+              required
+            />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="email">Email</label>
+            <input
+              type="email"
+              class="form-control"
+              id="email"
+              name="email"
+              value="{{ user.email }}"
+              required
+            />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="phone">Telefono</label>
+            <input
+              type="text"
+              class="form-control"
+              id="phone"
+              name="phone"
+              value="{{ user.phone }}"
+              placeholder="+39 333 1234567"
+            />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="tax_code">Codice fiscale</label>
+            <input
+              type="text"
+              class="form-control"
+              id="tax_code"
+              name="tax_code"
+              value="{{ user.tax_code }}"
+              placeholder="RSSMRA80A01F205X"
+            />
+          </div>
+        </div>
+        <div class="d-flex justify-content-end mt-4">
+          <button type="submit" class="btn btn-login text-white">Salva modifiche</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

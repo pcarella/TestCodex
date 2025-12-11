@@ -17,6 +17,12 @@ class _DummyFlask:
     def before_request(self, func):
         return func
 
+    def context_processor(self, func):
+        return func
+
+    def post(self, *args, **kwargs):
+        return self.route(*args, **kwargs)
+
 
 class _DummyMetadata:
     def create_all(self, engine):
@@ -59,6 +65,22 @@ class _DummySession:
         )
 
 
+class _DummyConnection:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def execute(self, *args, **kwargs):
+        return None
+
+
+class _DummyEngine:
+    def begin(self):
+        return _DummyConnection()
+
+
 # Install lightweight stubs so the module can load without external dependencies
 flask_stub = types.SimpleNamespace(
     Flask=_DummyFlask,
@@ -89,7 +111,11 @@ def _dummy_relationship(*args, **kwargs):
 
 
 def _dummy_create_engine(*args, **kwargs):
-    return types.SimpleNamespace()
+    return _DummyEngine()
+
+
+def _dummy_inspect(*args, **kwargs):
+    return types.SimpleNamespace(get_columns=lambda name: [])
 
 
 def _dummy_sessionmaker(**kwargs):
@@ -110,6 +136,7 @@ sqlalchemy_stub = types.SimpleNamespace(
     String=_dummy_type,
     create_engine=_dummy_create_engine,
     select=_dummy_select,
+    inspect=_dummy_inspect,
 )
 sqlalchemy_orm_stub = types.SimpleNamespace(
     declarative_base=_dummy_declarative_base,
