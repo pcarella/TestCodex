@@ -28,7 +28,16 @@ from flask_limiter.util import get_remote_address
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import generate_csrf
 from openai import OpenAI
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, create_engine, select
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    create_engine,
+    select,
+    inspect,
+)
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -118,6 +127,11 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(64), nullable=False)
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+    email = Column(String(255), nullable=True)
+    phone = Column(String(32), nullable=True)
+    tax_code = Column(String(32), nullable=True)
     reset_tokens = relationship(
         "PasswordResetToken", cascade="all, delete-orphan", back_populates="user"
     )
@@ -183,8 +197,31 @@ def persist_reset_token(user_id: int) -> str:
     return token
 
 
+def _ensure_user_contact_fields() -> None:
+    inspector = inspect(engine)
+    columns = {column.get("name") for column in inspector.get_columns("users")}
+    expected_columns = {
+        "first_name": "VARCHAR(100)",
+        "last_name": "VARCHAR(100)",
+        "email": "VARCHAR(255)",
+        "phone": "VARCHAR(32)",
+        "tax_code": "VARCHAR(32)",
+    }
+
+    missing = expected_columns.keys() - columns
+    if not missing:
+        return
+
+    with engine.begin() as connection:
+        for column_name in missing:
+            connection.execute(
+                f"ALTER TABLE users ADD COLUMN {column_name} {expected_columns[column_name]}"
+            )
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    _ensure_user_contact_fields()
     # Ensure legacy demo credentials are removed so only registered users can access
     with SessionLocal.begin() as db_session:
         for username in ("demo", "admin"):
@@ -238,6 +275,18 @@ def username_is_valid(username: str) -> bool:
 
 def password_is_valid(password: str) -> bool:
     return bool(PASSWORD_POLICY.match(password))
+
+
+def email_is_valid(email: str) -> bool:
+    return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email))
+
+
+def phone_is_valid(phone: str) -> bool:
+    return bool(re.fullmatch(r"[0-9+()\s.-]{6,20}", phone))
+
+
+def tax_code_is_valid(tax_code: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9]{11,16}", tax_code))
 
 
 def parse_categories(product_xml: ElementTree.Element) -> List[Dict[str, str]]:
@@ -657,6 +706,35 @@ def ensure_authenticated():
     return None
 
 
+def get_user_profile(username: str) -> Optional[Dict[str, Optional[str]]]:
+    with SessionLocal() as db_session:
+        user = db_session.execute(
+            select(User).where(User.username == username)
+        ).scalar_one_or_none()
+
+    if not user:
+        return None
+
+    return {
+        "username": user.username,
+        "first_name": user.first_name or "",
+        "last_name": user.last_name or "",
+        "email": user.email or "",
+        "phone": user.phone or "",
+        "tax_code": user.tax_code or "",
+    }
+
+
+@app.context_processor
+def inject_user_profile():
+    username = session.get("user")
+    if not username:
+        return {}
+
+    profile = get_user_profile(username)
+    return {"current_user_profile": profile} if profile else {}
+
+
 @app.route("/", methods=["GET"])
 def home():
     if session.get("user"):
@@ -713,11 +791,32 @@ def register():
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
+        first_name = request.form.get("first_name", "").strip()
+        last_name = request.form.get("last_name", "").strip()
+        email = request.form.get("email", "").strip()
+        phone = request.form.get("phone", "").strip()
+        tax_code = request.form.get("tax_code", "").strip().upper()
         password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
 
         if not username_is_valid(username):
             flash("Username non valido. Usa 3-64 caratteri alfanumerici o simboli ._-.")
+            return render_template("register.html")
+
+        if not first_name or not last_name:
+            flash("Inserisci nome e cognome.")
+            return render_template("register.html")
+
+        if not email_is_valid(email):
+            flash("Inserisci un'email valida.")
+            return render_template("register.html")
+
+        if phone and not phone_is_valid(phone):
+            flash("Inserisci un numero di telefono valido.")
+            return render_template("register.html")
+
+        if tax_code and not tax_code_is_valid(tax_code):
+            flash("Codice fiscale non valido.")
             return render_template("register.html")
 
         if not password_is_valid(password):
@@ -736,7 +835,17 @@ def register():
                 flash("Username già in uso. Scegline un altro.")
                 return render_template("register.html")
 
-            db_session.add(User(username=username, password_hash=hash_password(password)))
+            db_session.add(
+                User(
+                    username=username,
+                    password_hash=hash_password(password),
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=email,
+                    phone=phone or None,
+                    tax_code=tax_code or None,
+                )
+            )
 
         flash("Registrazione completata! Effettua il login.")
         return redirect(url_for("login"))
@@ -786,6 +895,65 @@ def forgot_password():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/account", methods=["GET", "POST"])
+@login_required
+def account():
+    username = session.get("user")
+    if not username:
+        return redirect(url_for("login"))
+
+    with SessionLocal.begin() as db_session:
+        user = db_session.execute(
+            select(User).where(User.username == username)
+        ).scalar_one_or_none()
+
+        if not user:
+            flash("Utente non trovato.")
+            return redirect(url_for("login"))
+
+        user_data = {
+            "username": user.username,
+            "first_name": user.first_name or "",
+            "last_name": user.last_name or "",
+            "email": user.email or "",
+            "phone": user.phone or "",
+            "tax_code": user.tax_code or "",
+        }
+
+        if request.method == "POST":
+            user_data["first_name"] = request.form.get("first_name", "").strip()
+            user_data["last_name"] = request.form.get("last_name", "").strip()
+            user_data["email"] = request.form.get("email", "").strip()
+            user_data["phone"] = request.form.get("phone", "").strip()
+            user_data["tax_code"] = request.form.get("tax_code", "").strip().upper()
+
+            if not user_data["first_name"] or not user_data["last_name"]:
+                flash("Inserisci nome e cognome.")
+                return render_template("account.html", user=user_data)
+
+            if not email_is_valid(user_data["email"]):
+                flash("Inserisci un'email valida.")
+                return render_template("account.html", user=user_data)
+
+            if user_data["phone"] and not phone_is_valid(user_data["phone"]):
+                flash("Inserisci un numero di telefono valido.")
+                return render_template("account.html", user=user_data)
+
+            if user_data["tax_code"] and not tax_code_is_valid(user_data["tax_code"]):
+                flash("Codice fiscale non valido.")
+                return render_template("account.html", user=user_data)
+
+            user.first_name = user_data["first_name"]
+            user.last_name = user_data["last_name"]
+            user.email = user_data["email"]
+            user.phone = user_data["phone"] or None
+            user.tax_code = user_data["tax_code"] or None
+
+            flash("Dati aggiornati correttamente.")
+
+    return render_template("account.html", user=user_data)
 
 
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
