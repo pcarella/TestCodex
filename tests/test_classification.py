@@ -137,6 +137,7 @@ sqlalchemy_stub = types.SimpleNamespace(
     create_engine=_dummy_create_engine,
     select=_dummy_select,
     inspect=_dummy_inspect,
+    text=_dummy_type,
 )
 sqlalchemy_orm_stub = types.SimpleNamespace(
     declarative_base=_dummy_declarative_base,
@@ -174,6 +175,8 @@ limiter_stub = types.SimpleNamespace(
 )
 csrf_csrf_stub = types.SimpleNamespace(generate_csrf=lambda: "token")
 defusedxml_stub = types.SimpleNamespace(ElementTree=types.SimpleNamespace(fromstring=lambda x: None))
+
+os.environ.setdefault("FLASK_SECRET_KEY", "test-secret")
 
 sys.modules.setdefault("flask", flask_stub)
 sys.modules.setdefault("sqlalchemy", sqlalchemy_stub)
