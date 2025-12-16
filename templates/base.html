@@ -36,11 +36,13 @@
         <div class="container">
           <div class="app-header__inner">
             <div class="app-brand">
-              <img
-                src="{{ url_for('static', filename='logo.png') }}"
-                alt="PIM Assistant"
-                class="brand-logo"
-              />
+              <a class="text-decoration-none" href="{{ url_for('codes') }}">
+                <img
+                  src="{{ url_for('static', filename='logo.png') }}"
+                  alt="PIM Assistant"
+                  class="brand-logo"
+                />
+              </a>
             </div>
 
             <div class="app-steps" aria-label="Progressione del flusso">
