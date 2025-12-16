@@ -88,6 +88,21 @@ body {
   border: 1px solid var(--border);
 }
 
+.app-user__button {
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.app-user__button:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.app-user__button.dropdown-toggle::after {
+  display: none;
+}
+
 .app-user__badge {
   width: 38px;
   height: 38px;
