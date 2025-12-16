@@ -1019,7 +1019,7 @@ def account():
     return render_template("account.html", user=user_data)
 
 
-@app.route("/change-password", methods=["POST"])
+@app.route("/change-password", methods=["GET", "POST"])
 @login_required
 @limiter.limit("5 per hour")
 def change_password():
@@ -1027,21 +1027,24 @@ def change_password():
     if not username:
         return redirect(url_for("login"))
 
+    if request.method == "GET":
+        return render_template("change_password.html", title="Cambia password")
+
     current_password = request.form.get("current_password", "")
     new_password = request.form.get("new_password", "")
     confirm_password = request.form.get("confirm_password", "")
 
     if not current_password or not new_password or not confirm_password:
         flash("Compila tutti i campi obbligatori.")
-        return redirect(request.referrer or url_for("account"))
+        return redirect(request.referrer or url_for("change_password"))
 
     if new_password != confirm_password:
         flash("Le password non coincidono.")
-        return redirect(request.referrer or url_for("account"))
+        return redirect(request.referrer or url_for("change_password"))
 
     if not password_is_valid(new_password):
         flash("Password non conforme: minimo 12 caratteri con maiuscola, minuscola e numero.")
-        return redirect(request.referrer or url_for("account"))
+        return redirect(request.referrer or url_for("change_password"))
 
     with SessionLocal.begin() as db_session:
         user = db_session.execute(select(User).where(User.username == username)).scalar_one_or_none()
@@ -1052,7 +1055,7 @@ def change_password():
 
         if not verify_password(current_password, user.password_hash):
             flash("Password attuale non corretta.")
-            return redirect(request.referrer or url_for("account"))
+            return redirect(request.referrer or url_for("change_password"))
 
         user.password_hash = hash_password(new_password)
 
@@ -1063,7 +1066,7 @@ def change_password():
             db_session.delete(token)
 
     flash("Password aggiornata con successo.")
-    return redirect(request.referrer or url_for("account"))
+    return redirect(url_for("change_password"))
 
 
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
