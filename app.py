@@ -1019,6 +1019,53 @@ def account():
     return render_template("account.html", user=user_data)
 
 
+@app.route("/change-password", methods=["POST"])
+@login_required
+@limiter.limit("5 per hour")
+def change_password():
+    username = session.get("user")
+    if not username:
+        return redirect(url_for("login"))
+
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    if not current_password or not new_password or not confirm_password:
+        flash("Compila tutti i campi obbligatori.")
+        return redirect(request.referrer or url_for("account"))
+
+    if new_password != confirm_password:
+        flash("Le password non coincidono.")
+        return redirect(request.referrer or url_for("account"))
+
+    if not password_is_valid(new_password):
+        flash("Password non conforme: minimo 12 caratteri con maiuscola, minuscola e numero.")
+        return redirect(request.referrer or url_for("account"))
+
+    with SessionLocal.begin() as db_session:
+        user = db_session.execute(select(User).where(User.username == username)).scalar_one_or_none()
+
+        if not user:
+            flash("Utente non trovato.")
+            return redirect(url_for("login"))
+
+        if not verify_password(current_password, user.password_hash):
+            flash("Password attuale non corretta.")
+            return redirect(request.referrer or url_for("account"))
+
+        user.password_hash = hash_password(new_password)
+
+        tokens = db_session.execute(
+            select(PasswordResetToken).where(PasswordResetToken.user_id == user.id)
+        ).scalars()
+        for token in tokens:
+            db_session.delete(token)
+
+    flash("Password aggiornata con successo.")
+    return redirect(request.referrer or url_for("account"))
+
+
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
 @limiter.limit("5 per hour")
 def reset_password(token: str):
