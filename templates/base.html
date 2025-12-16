@@ -95,6 +95,54 @@
                     <li>
                       <a class="dropdown-item" href="{{ url_for('account') }}">Il mio account</a>
                     </li>
+                    <li><hr class="dropdown-divider" /></li>
+                    <li class="dropdown-header text-uppercase text-muted">Reset password</li>
+                    <li>
+                      <form
+                        method="post"
+                        action="{{ url_for('change_password') }}"
+                        class="px-3 py-2 password-reset-form"
+                        novalidate
+                      >
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <div class="mb-2">
+                          <label class="form-label" for="current_password">Password attuale</label>
+                          <input
+                            type="password"
+                            class="form-control"
+                            id="current_password"
+                            name="current_password"
+                            autocomplete="current-password"
+                            required
+                          />
+                        </div>
+                        <div class="mb-2">
+                          <label class="form-label" for="new_password">Nuova password</label>
+                          <input
+                            type="password"
+                            class="form-control"
+                            id="new_password"
+                            name="new_password"
+                            autocomplete="new-password"
+                            required
+                          />
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label" for="confirm_password">Ripeti nuova password</label>
+                          <input
+                            type="password"
+                            class="form-control"
+                            id="confirm_password"
+                            name="confirm_password"
+                            autocomplete="new-password"
+                            required
+                          />
+                        </div>
+                        <div class="d-grid">
+                          <button type="submit" class="btn btn-primary btn-sm">Aggiorna password</button>
+                        </div>
+                      </form>
+                    </li>
                   </ul>
                 </div>
                 <a class="btn btn-outline-secondary" href="{{ url_for('logout') }}">Logout</a>
